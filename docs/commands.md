@@ -22,12 +22,17 @@ granola auth logout [--force]
 granola notes list \
   [--created-before DATE] \
   [--created-after DATE] \
+  [--since 7d] \
   [--updated-after DATE] \
+  [--updated-since 24h] \
   [--folder-id FOL_ID] \
   [--cursor CURSOR] \
   [--page-size N] \
   [--all] \
-  [--limit N]
+  [--limit N] \
+  [--sort created-at|updated-at|title] \
+  [--order asc|desc] \
+  [--no-truncate]
 
 granola notes get NOTE_ID [--include transcript]
 granola notes open NOTE_ID [--print]
