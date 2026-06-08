@@ -45,13 +45,14 @@ granola export note NOTE_ID \
   [--format markdown|json|txt|transcript] \
   [--include-transcript] \
   [-o FILE] \
-  [--force]
+  [--force|--skip-existing]
 
 granola export notes \
   [--format jsonl|markdown|json] \
   [--created-after DATE] \
-  [-o FILE] \
-  [--force]
+  [-o FILE | --output-dir DIR] \
+  [--include-transcript] \
+  [--force|--skip-existing]
 ```
 
 ## Utilities

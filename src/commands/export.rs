@@ -38,6 +38,9 @@ struct ExportNoteCommand {
     /// Overwrite an existing output file.
     #[arg(long)]
     force: bool,
+    /// Skip writing if the output file already exists.
+    #[arg(long, conflicts_with = "force")]
+    skip_existing: bool,
 }
 
 #[derive(Debug, Args)]
@@ -70,11 +73,20 @@ struct ExportNotesCommand {
     #[arg(long, value_enum, default_value_t = NotesExportFormat::Jsonl)]
     format: NotesExportFormat,
     /// Write to this file instead of stdout.
-    #[arg(short, long)]
+    #[arg(short, long, conflicts_with = "output_dir")]
     output_file: Option<PathBuf>,
+    /// Write one file per note into this directory. Supports markdown and json formats.
+    #[arg(long, conflicts_with = "output_file")]
+    output_dir: Option<PathBuf>,
+    /// Include transcripts when writing one file per note with markdown or JSON output.
+    #[arg(long)]
+    include_transcript: bool,
     /// Overwrite an existing output file.
     #[arg(long)]
     force: bool,
+    /// Skip files that already exist.
+    #[arg(long, conflicts_with = "force")]
+    skip_existing: bool,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -131,7 +143,7 @@ async fn export_note(
     write_or_print(
         content,
         command.output_file.as_deref(),
-        command.force,
+        WriteMode::from_flags(command.force, command.skip_existing),
         output,
     )
 }
@@ -142,6 +154,10 @@ async fn export_notes(
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let notes = collect_note_summaries(client, &command).await?;
+    if let Some(output_dir) = command.output_dir.as_deref() {
+        return export_notes_to_dir(client, &notes, output_dir, &command, output).await;
+    }
+
     let content = match command.format {
         NotesExportFormat::Jsonl => render_notes_jsonl(&notes)?,
         NotesExportFormat::Json => serde_json::to_string_pretty(&notes).map_err(CliError::from)?,
@@ -151,9 +167,68 @@ async fn export_notes(
     write_or_print(
         content,
         command.output_file.as_deref(),
-        command.force,
+        WriteMode::from_flags(command.force, command.skip_existing),
         output,
     )
+}
+
+async fn export_notes_to_dir(
+    client: &GranolaClient,
+    notes: &[NoteSummary],
+    output_dir: &Path,
+    command: &ExportNotesCommand,
+    output: &OutputOptions,
+) -> Result<(), CliError> {
+    if matches!(command.format, NotesExportFormat::Jsonl) {
+        return Err(CliError::invalid_input(
+            "--output-dir is not supported with --format jsonl; use --format markdown or --format json",
+        ));
+    }
+
+    let mut written = 0usize;
+    let mut skipped = 0usize;
+    let mode = WriteMode::from_flags(command.force, command.skip_existing);
+
+    for summary in notes {
+        let note = client
+            .get_note(&summary.id, command.include_transcript)
+            .await?;
+        let extension = match command.format {
+            NotesExportFormat::Markdown => "md",
+            NotesExportFormat::Json => "json",
+            NotesExportFormat::Jsonl => unreachable!("jsonl rejected above"),
+        };
+        let path = output_dir.join(safe_note_filename(&note, extension));
+        let content = match command.format {
+            NotesExportFormat::Markdown => render_note_markdown(&note, command.include_transcript),
+            NotesExportFormat::Json => {
+                serde_json::to_string_pretty(&note).map_err(CliError::from)?
+            }
+            NotesExportFormat::Jsonl => unreachable!("jsonl rejected above"),
+        };
+
+        if atomic_write(&path, &content, mode)? {
+            written += 1;
+        } else {
+            skipped += 1;
+        }
+    }
+
+    let data = json!({
+        "output_dir": output_dir,
+        "written": written,
+        "skipped": skipped,
+    });
+    if output.is_json() {
+        return print_json(&data, output);
+    }
+    if !output.quiet {
+        println!(
+            "wrote {written} file(s) to {}; skipped {skipped}",
+            output_dir.display()
+        );
+    }
+    Ok(())
 }
 
 async fn collect_note_summaries(
@@ -198,17 +273,21 @@ async fn collect_note_summaries(
 fn write_or_print(
     content: String,
     output_file: Option<&Path>,
-    force: bool,
+    mode: WriteMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     if let Some(path) = output_file {
-        atomic_write(path, &content, force)?;
-        let data = json!({ "path": path, "written": true });
+        let written = atomic_write(path, &content, mode)?;
+        let data = json!({ "path": path, "written": written, "skipped": !written });
         if output.is_json() {
             return print_json(&data, output);
         }
         if !output.quiet {
-            println!("wrote {}", path.display());
+            if written {
+                println!("wrote {}", path.display());
+            } else {
+                println!("skipped existing {}", path.display());
+            }
         }
         return Ok(());
     }
@@ -220,12 +299,37 @@ fn write_or_print(
     Ok(())
 }
 
-fn atomic_write(path: &Path, content: &str, force: bool) -> Result<(), CliError> {
-    if path.exists() && !force {
-        return Err(CliError::invalid_input(format!(
-            "refusing to overwrite {}; pass --force to replace it",
-            path.display()
-        )));
+#[derive(Debug, Clone, Copy)]
+enum WriteMode {
+    CreateNew,
+    Force,
+    SkipExisting,
+}
+
+impl WriteMode {
+    fn from_flags(force: bool, skip_existing: bool) -> Self {
+        if force {
+            Self::Force
+        } else if skip_existing {
+            Self::SkipExisting
+        } else {
+            Self::CreateNew
+        }
+    }
+}
+
+fn atomic_write(path: &Path, content: &str, mode: WriteMode) -> Result<bool, CliError> {
+    if path.exists() {
+        match mode {
+            WriteMode::Force => {}
+            WriteMode::SkipExisting => return Ok(false),
+            WriteMode::CreateNew => {
+                return Err(CliError::invalid_input(format!(
+                    "refusing to overwrite {}; pass --force to replace it or --skip-existing to keep it",
+                    path.display()
+                )));
+            }
+        }
     }
 
     if let Some(parent) = path
@@ -273,7 +377,7 @@ fn atomic_write(path: &Path, content: &str, force: bool) -> Result<(), CliError>
             path.display()
         ))
     })?;
-    Ok(())
+    Ok(true)
 }
 
 fn render_note_markdown(note: &Note, include_transcript: bool) -> String {
@@ -349,6 +453,38 @@ fn render_notes_markdown(notes: &[NoteSummary]) -> String {
     out
 }
 
+fn safe_note_filename(note: &Note, extension: &str) -> String {
+    let date = note.created_at.split('T').next().unwrap_or("unknown-date");
+    let title = note.title.as_deref().unwrap_or("untitled-note");
+    let slug = slugify(title);
+    format!("{date}-{slug}-{}.{}", note.id, extension)
+}
+
+fn slugify(input: &str) -> String {
+    let mut slug = String::new();
+    let mut previous_dash = false;
+
+    for ch in input.chars().flat_map(char::to_lowercase) {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch);
+            previous_dash = false;
+        } else if !previous_dash && !slug.is_empty() {
+            slug.push('-');
+            previous_dash = true;
+        }
+    }
+
+    while slug.ends_with('-') {
+        slug.pop();
+    }
+
+    if slug.is_empty() {
+        "untitled-note".to_string()
+    } else {
+        slug.chars().take(80).collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -371,5 +507,21 @@ mod tests {
         let jsonl = render_notes_jsonl(&response.notes).unwrap();
         assert_eq!(jsonl.lines().count(), 1);
         assert!(jsonl.starts_with('{'));
+    }
+
+    #[test]
+    fn builds_safe_note_filenames() {
+        let note: Note = serde_json::from_str(include_str!(
+            "../../tests/fixtures/get_note_with_transcript.json"
+        ))
+        .unwrap();
+        let filename = safe_note_filename(&note, "md");
+        assert_eq!(filename, "2026-06-08-untitled-note-not_BBBBBBBBBBBBBB.md");
+    }
+
+    #[test]
+    fn slugifies_titles_for_filenames() {
+        assert_eq!(slugify("Hello, World! / Q2"), "hello-world-q2");
+        assert_eq!(slugify("!!!"), "untitled-note");
     }
 }
