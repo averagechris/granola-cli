@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod export;
 pub mod folders;
 pub mod notes;
 
@@ -12,6 +13,7 @@ pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
         "commands": {
             "auth": ["granola auth login", "granola auth status --validate", "granola auth logout"],
             "notes": ["granola notes list --output json", "granola notes get NOTE_ID --include transcript --output json"],
+            "export": ["granola export note NOTE_ID --format markdown", "granola export notes --created-after 2026-06-01 --format jsonl"],
             "folders": ["granola folders list --output json"]
         },
         "agent_flags": ["--output json", "--compact", "--fields id,title,owner.email", "--quiet", "--api-key KEY"],
@@ -32,6 +34,7 @@ pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
     println!(
         "- Use `granola notes get NOTE_ID --include transcript --output json` for full note data."
     );
+    println!("- Use `granola export note NOTE_ID --format markdown` for portable note output.");
     println!("- Use `--fields` to reduce JSON payloads, e.g. `--fields id,title,owner.email`.");
     Ok(())
 }

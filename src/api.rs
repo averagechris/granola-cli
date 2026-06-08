@@ -27,7 +27,6 @@ impl GranolaClient {
         Self::with_base_url(DEFAULT_BASE_URL.to_string(), api_key)
     }
 
-    #[cfg(test)]
     fn with_base_url(base_url: String, api_key: String) -> Result<Self, CliError> {
         let http = reqwest::Client::builder()
             .user_agent(format!("granola-cli/{}", env!("CARGO_PKG_VERSION")))

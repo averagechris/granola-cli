@@ -52,6 +52,8 @@ enum Command {
     Notes(commands::notes::NotesCommand),
     /// List accessible Granola folders.
     Folders(commands::folders::FoldersCommand),
+    /// Export notes and transcripts.
+    Export(commands::export::ExportCommand),
     /// Print agent-focused usage guidance.
     Agent,
     /// Check local CLI configuration and credential availability.
@@ -83,6 +85,9 @@ async fn run(
         Command::Notes(command) => commands::notes::handle(command, api_key_override, output).await,
         Command::Folders(command) => {
             commands::folders::handle(command, api_key_override, output).await
+        }
+        Command::Export(command) => {
+            commands::export::handle(command, api_key_override, output).await
         }
         Command::Agent => commands::agent(output),
         Command::Doctor => commands::doctor(api_key_override, output),
