@@ -3,15 +3,23 @@ use crate::types::{ListFoldersResponse, ListNotesResponse, Note};
 use reqwest::{header, StatusCode};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
+use tokio::time::{sleep, Instant};
 
 const DEFAULT_BASE_URL: &str = "https://public-api.granola.ai";
+const MAX_GET_ATTEMPTS: u8 = 3;
+const MIN_REQUEST_INTERVAL: Duration = Duration::from_millis(200);
 
 #[derive(Debug, Clone)]
 pub struct GranolaClient {
     base_url: String,
     api_key: String,
     http: reqwest::Client,
+    min_request_interval: Duration,
+    max_get_attempts: u8,
+    last_request_at: Arc<Mutex<Option<Instant>>>,
 }
 
 impl GranolaClient {
@@ -31,7 +39,22 @@ impl GranolaClient {
             base_url,
             api_key,
             http,
+            min_request_interval: MIN_REQUEST_INTERVAL,
+            max_get_attempts: MAX_GET_ATTEMPTS,
+            last_request_at: Arc::new(Mutex::new(None)),
         })
+    }
+
+    #[cfg(test)]
+    fn without_request_pacing(mut self) -> Self {
+        self.min_request_interval = Duration::ZERO;
+        self
+    }
+
+    #[cfg(test)]
+    fn without_retries(mut self) -> Self {
+        self.max_get_attempts = 1;
+        self
     }
 
     pub async fn list_notes(
@@ -65,6 +88,44 @@ impl GranolaClient {
         path: &str,
         query: Vec<(&'static str, String)>,
     ) -> Result<T, CliError> {
+        let mut attempt = 1;
+
+        loop {
+            match self.get_json_once(path, query.clone()).await {
+                Ok(value) => return Ok(value),
+                Err(RequestFailure::Http {
+                    status,
+                    body,
+                    retry_after,
+                }) => {
+                    if attempt < self.max_get_attempts && is_retryable_status(status) {
+                        sleep(retry_delay(attempt, retry_after)).await;
+                        attempt += 1;
+                        continue;
+                    }
+
+                    return Err(http_error(status, body, retry_after));
+                }
+                Err(RequestFailure::Transport(error)) => {
+                    if attempt < self.max_get_attempts && is_retryable_transport(&error) {
+                        sleep(retry_delay(attempt, None)).await;
+                        attempt += 1;
+                        continue;
+                    }
+
+                    return Err(CliError::from(error));
+                }
+                Err(RequestFailure::Decode(error)) => return Err(CliError::from(error)),
+            }
+        }
+    }
+
+    async fn get_json_once<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: Vec<(&'static str, String)>,
+    ) -> Result<T, RequestFailure> {
+        self.pace_request().await;
         let url = format!("{}{}", self.base_url, path);
         let response = self
             .http
@@ -73,7 +134,8 @@ impl GranolaClient {
             .header(header::ACCEPT, "application/json")
             .query(&query)
             .send()
-            .await?;
+            .await
+            .map_err(RequestFailure::Transport)?;
 
         let status = response.status();
         let retry_after = response
@@ -84,11 +146,41 @@ impl GranolaClient {
         let body = response.text().await.unwrap_or_default();
 
         if status.is_success() {
-            return serde_json::from_str(&body).map_err(CliError::from);
+            return serde_json::from_str(&body).map_err(RequestFailure::Decode);
         }
 
-        Err(http_error(status, body, retry_after))
+        Err(RequestFailure::Http {
+            status,
+            body,
+            retry_after,
+        })
     }
+
+    async fn pace_request(&self) {
+        if self.min_request_interval.is_zero() {
+            return;
+        }
+
+        let mut last_request_at = self.last_request_at.lock().await;
+        if let Some(last) = *last_request_at {
+            let elapsed = last.elapsed();
+            if elapsed < self.min_request_interval {
+                sleep(self.min_request_interval - elapsed).await;
+            }
+        }
+        *last_request_at = Some(Instant::now());
+    }
+}
+
+#[derive(Debug)]
+enum RequestFailure {
+    Http {
+        status: StatusCode,
+        body: String,
+        retry_after: Option<u64>,
+    },
+    Transport(reqwest::Error),
+    Decode(serde_json::Error),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -165,6 +257,23 @@ fn http_error(status: StatusCode, body: String, retry_after: Option<u64>) -> Cli
     }
 }
 
+fn is_retryable_status(status: StatusCode) -> bool {
+    status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()
+}
+
+fn is_retryable_transport(error: &reqwest::Error) -> bool {
+    error.is_timeout() || error.is_connect()
+}
+
+fn retry_delay(attempt: u8, retry_after: Option<u64>) -> Duration {
+    if let Some(retry_after) = retry_after {
+        return Duration::from_secs(retry_after);
+    }
+
+    let multiplier = 2_u64.saturating_pow((attempt.saturating_sub(1)).into());
+    Duration::from_millis(200 * multiplier)
+}
+
 pub fn validate_page_size(page_size: u8) -> Result<u8, CliError> {
     if (1..=30).contains(&page_size) {
         Ok(page_size)
@@ -216,7 +325,9 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string()).unwrap();
+        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string())
+            .unwrap()
+            .without_request_pacing();
         let response = client
             .list_notes(&ListNotesParams {
                 created_after: Some("2026-06-01".to_string()),
@@ -243,7 +354,9 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string()).unwrap();
+        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string())
+            .unwrap()
+            .without_request_pacing();
         let note = client.get_note("not_AAAAAAAAAAAAAA", true).await.unwrap();
 
         assert_eq!(note.id, "not_BBBBBBBBBBBBBB");
@@ -262,7 +375,9 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string()).unwrap();
+        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string())
+            .unwrap()
+            .without_request_pacing();
         let response = client
             .list_folders(&ListFoldersParams::default())
             .await
@@ -302,13 +417,51 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string()).unwrap();
+        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string())
+            .unwrap()
+            .without_request_pacing();
         let err = client
             .list_folders(&ListFoldersParams::default())
             .await
             .unwrap_err();
 
         assert_eq!(err.kind, ErrorKind::General);
+    }
+
+    #[tokio::test]
+    async fn retries_transient_server_errors_for_gets() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/folders"))
+            .respond_with(ResponseTemplate::new(500).set_body_json(serde_json::json!({
+                "message": "temporary"
+            })))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/folders"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(
+                include_str!("../tests/fixtures/list_folders.json"),
+                "application/json",
+            ))
+            .mount(&server)
+            .await;
+
+        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string())
+            .unwrap()
+            .without_request_pacing();
+        let response = client
+            .list_folders(&ListFoldersParams::default())
+            .await
+            .unwrap();
+
+        assert_eq!(response.folders.len(), 2);
+    }
+
+    #[test]
+    fn retry_delay_uses_retry_after_when_present() {
+        assert_eq!(retry_delay(1, Some(9)), Duration::from_secs(9));
     }
 
     async fn error_for_status(status: StatusCode, retry_after: Option<&str>) -> CliError {
@@ -324,7 +477,10 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string()).unwrap();
+        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string())
+            .unwrap()
+            .without_request_pacing()
+            .without_retries();
         client
             .list_folders(&ListFoldersParams::default())
             .await
