@@ -69,16 +69,32 @@
             cargo test --locked
           '';
         };
+        ciAudit = mkRepoScript {
+          name = "ci-audit";
+          runtimeInputs = with pkgs; [cargo-audit];
+          text = ''
+            cargo audit --deny warnings
+          '';
+        };
+        ciDeny = mkRepoScript {
+          name = "ci-deny";
+          runtimeInputs = with pkgs; [cargo-deny];
+          text = ''
+            cargo deny check
+          '';
+        };
         repoScripts = pkgs.symlinkJoin {
           name = "granola-cli-scripts";
-          paths = [ciFmt ciClippy ciTest];
+          paths = [ciAudit ciClippy ciDeny ciFmt ciTest];
         };
       in {
         packages = {
           default = granola;
           granola = granola;
+          ci-audit = ciAudit;
           ci-fmt = ciFmt;
           ci-clippy = ciClippy;
+          ci-deny = ciDeny;
           ci-test = ciTest;
           scripts = repoScripts;
         };
@@ -91,8 +107,10 @@
           drv = granola;
           exePath = "/bin/${cliProgram}";
         };
+        apps.ci-audit = flake-utils.lib.mkApp {drv = ciAudit;};
         apps.ci-fmt = flake-utils.lib.mkApp {drv = ciFmt;};
         apps.ci-clippy = flake-utils.lib.mkApp {drv = ciClippy;};
+        apps.ci-deny = flake-utils.lib.mkApp {drv = ciDeny;};
         apps.ci-test = flake-utils.lib.mkApp {drv = ciTest;};
 
         devShells.default = pkgs.mkShell {

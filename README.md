@@ -15,6 +15,8 @@ cargo test
 nix run .#ci-fmt
 nix run .#ci-clippy
 nix run .#ci-test
+nix run .#ci-deny
+nix run .#ci-audit
 ```
 
 `Cargo.lock` is intentionally not hand-written. Generate it from inside the Nix shell when implementation begins:

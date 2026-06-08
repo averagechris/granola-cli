@@ -3,7 +3,6 @@ use crate::error::CliError;
 use crate::output::{print_json, OutputOptions};
 use crate::types::Folder;
 use clap::{Args, Subcommand};
-use tabled::{Table, Tabled};
 
 #[derive(Debug, Args)]
 pub struct FoldersCommand {
@@ -84,7 +83,6 @@ async fn list_folders(
     Ok(())
 }
 
-#[derive(Tabled)]
 struct FolderRow<'a> {
     id: &'a str,
     name: &'a str,
@@ -104,6 +102,44 @@ fn print_folder_table(folders: &[Folder]) {
     if rows.is_empty() {
         println!("No folders found");
     } else {
-        println!("{}", Table::new(rows));
+        print_rows(
+            &["id", "name", "parent_folder_id"],
+            rows.iter()
+                .map(|row| vec![row.id, row.name, row.parent_folder_id])
+                .collect(),
+        );
     }
+}
+
+fn print_rows(headers: &[&str], rows: Vec<Vec<&str>>) {
+    let mut widths: Vec<usize> = headers.iter().map(|header| header.len()).collect();
+    for row in &rows {
+        for (index, cell) in row.iter().enumerate() {
+            widths[index] = widths[index].max(cell.len());
+        }
+    }
+
+    print_table_line(&widths);
+    print_table_row(headers.iter().copied(), &widths);
+    print_table_line(&widths);
+    for row in &rows {
+        print_table_row(row.iter().copied(), &widths);
+    }
+    print_table_line(&widths);
+}
+
+fn print_table_line(widths: &[usize]) {
+    print!("+");
+    for width in widths {
+        print!("-{:-<width$}-+", "", width = width);
+    }
+    println!();
+}
+
+fn print_table_row<'a>(cells: impl IntoIterator<Item = &'a str>, widths: &[usize]) {
+    print!("|");
+    for (cell, width) in cells.into_iter().zip(widths) {
+        print!(" {cell:<width$} |", width = width);
+    }
+    println!();
 }

@@ -5,7 +5,6 @@ use crate::types::{Note, NoteSummary};
 use chrono::{Duration, SecondsFormat, Utc};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json::json;
-use tabled::{Table, Tabled};
 
 #[derive(Debug, Args)]
 pub struct NotesCommand {
@@ -220,7 +219,6 @@ async fn open_note(
     Ok(())
 }
 
-#[derive(Tabled)]
 struct NoteRow {
     id: String,
     title: String,
@@ -244,8 +242,46 @@ fn print_note_table(notes: &[NoteSummary], no_truncate: bool) {
     if rows.is_empty() {
         println!("No notes found");
     } else {
-        println!("{}", Table::new(rows));
+        print_rows(
+            &["id", "title", "owner", "created_at", "updated_at"],
+            rows.into_iter()
+                .map(|row| vec![row.id, row.title, row.owner, row.created_at, row.updated_at])
+                .collect(),
+        );
     }
+}
+
+fn print_rows(headers: &[&str], rows: Vec<Vec<String>>) {
+    let mut widths: Vec<usize> = headers.iter().map(|header| header.len()).collect();
+    for row in &rows {
+        for (index, cell) in row.iter().enumerate() {
+            widths[index] = widths[index].max(cell.len());
+        }
+    }
+
+    print_table_line(&widths);
+    print_table_row(headers.iter().copied(), &widths);
+    print_table_line(&widths);
+    for row in &rows {
+        print_table_row(row.iter().map(String::as_str), &widths);
+    }
+    print_table_line(&widths);
+}
+
+fn print_table_line(widths: &[usize]) {
+    print!("+");
+    for width in widths {
+        print!("-{:-<width$}-+", "", width = width);
+    }
+    println!();
+}
+
+fn print_table_row<'a>(cells: impl IntoIterator<Item = &'a str>, widths: &[usize]) {
+    print!("|");
+    for (cell, width) in cells.into_iter().zip(widths) {
+        print!(" {cell:<width$} |", width = width);
+    }
+    println!();
 }
 
 fn display_title(note: &NoteSummary, no_truncate: bool) -> String {
