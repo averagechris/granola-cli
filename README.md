@@ -19,6 +19,18 @@ nix run .#ci-deny
 nix run .#ci-audit
 ```
 
+## Hosted downloads
+
+For non-Nix users, build and publish a SourceHut Pages download site:
+
+```bash
+nix run .#package-macos
+nix run .#build-pages
+nix run .#publish-pages
+```
+
+See [Hosted Downloads](docs/downloads.md).
+
 `Cargo.lock` is intentionally not hand-written. Generate it from inside the Nix shell when implementation begins:
 
 ```bash
@@ -87,6 +99,7 @@ granola auth login --key-stdin --validate < ./scratch/token
 - [Authentication](docs/auth.md)
 - [JSON output](docs/json.md)
 - [Exporting notes](docs/export.md)
+- [Hosted Downloads](docs/downloads.md)
 - [Shell completions](docs/shell-completions.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [ADRs](docs/adr/)

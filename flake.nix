@@ -83,9 +83,43 @@
             cargo deny check
           '';
         };
+        packageMacos = mkRepoScript {
+          name = "package-macos";
+          runtimeInputs = with pkgs; [
+            coreutils
+            gnutar
+            gzip
+            granola
+            python3
+          ];
+          text = ''
+            exec bash ./scripts/package-macos.sh "$@"
+          '';
+        };
+        buildPages = mkRepoScript {
+          name = "build-pages";
+          runtimeInputs = with pkgs; [
+            coreutils
+            gnutar
+            gzip
+            python3
+          ];
+          text = ''
+            exec bash ./scripts/build-pages.sh "$@"
+          '';
+        };
+        publishPages = mkRepoScript {
+          name = "publish-pages";
+          runtimeInputs = with pkgs; [
+            hut
+          ];
+          text = ''
+            exec bash ./scripts/publish-pages.sh "$@"
+          '';
+        };
         repoScripts = pkgs.symlinkJoin {
           name = "granola-cli-scripts";
-          paths = [ciAudit ciClippy ciDeny ciFmt ciTest];
+          paths = [buildPages ciAudit ciClippy ciDeny ciFmt ciTest packageMacos publishPages];
         };
       in {
         packages = {
@@ -96,6 +130,9 @@
           ci-clippy = ciClippy;
           ci-deny = ciDeny;
           ci-test = ciTest;
+          package-macos = packageMacos;
+          build-pages = buildPages;
+          publish-pages = publishPages;
           scripts = repoScripts;
         };
 
@@ -112,6 +149,9 @@
         apps.ci-clippy = flake-utils.lib.mkApp {drv = ciClippy;};
         apps.ci-deny = flake-utils.lib.mkApp {drv = ciDeny;};
         apps.ci-test = flake-utils.lib.mkApp {drv = ciTest;};
+        apps.package-macos = flake-utils.lib.mkApp {drv = packageMacos;};
+        apps.build-pages = flake-utils.lib.mkApp {drv = buildPages;};
+        apps.publish-pages = flake-utils.lib.mkApp {drv = publishPages;};
 
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
@@ -121,6 +161,7 @@
             cargo-deny
             clippy
             direnv
+            hut
             jujutsu
             nixd
             pkg-config
