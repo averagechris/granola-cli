@@ -20,6 +20,16 @@ Check:
 
 Granola documents a 25-request burst and 5 requests/second sustained limit. The CLI paces requests and retries safe GETs on transient failures, but large `--all` exports may still take time.
 
+## Debugging API responses
+
+Use the guarded raw API command to inspect documented endpoints without exposing headers or secrets:
+
+```bash
+granola api get /v1/notes --query page_size=5 --output json --compact
+```
+
+Only `/v1/...` paths are accepted.
+
 ## Keyring issues
 
 Run:

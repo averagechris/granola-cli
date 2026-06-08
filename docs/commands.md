@@ -16,6 +16,15 @@ granola auth status [--validate]
 granola auth logout [--force]
 ```
 
+## Raw API
+
+```bash
+granola api get /v1/notes --query page_size=5
+granola api get /v1/folders --output json
+```
+
+Raw API requests are guarded: paths must start with `/v1/`, cannot include a URL scheme, and cannot include an inline query string. Pass query parameters with repeated `--query key=value` flags.
+
 ## Notes
 
 ```bash

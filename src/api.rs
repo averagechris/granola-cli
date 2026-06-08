@@ -70,7 +70,7 @@ impl GranolaClient {
     ) -> Result<Note, CliError> {
         let mut query = Vec::new();
         if include_transcript {
-            query.push(("include", "transcript".to_string()));
+            query.push(("include".to_string(), "transcript".to_string()));
         }
         self.get_json(&format!("/v1/notes/{note_id}"), query).await
     }
@@ -82,10 +82,18 @@ impl GranolaClient {
         self.get_json("/v1/folders", params.to_query()).await
     }
 
+    pub async fn get_raw_json(
+        &self,
+        path: &str,
+        query: Vec<(String, String)>,
+    ) -> Result<Value, CliError> {
+        self.get_json(path, query).await
+    }
+
     async fn get_json<T: DeserializeOwned>(
         &self,
         path: &str,
-        query: Vec<(&'static str, String)>,
+        query: Vec<(String, String)>,
     ) -> Result<T, CliError> {
         let mut attempt = 1;
 
@@ -122,7 +130,7 @@ impl GranolaClient {
     async fn get_json_once<T: DeserializeOwned>(
         &self,
         path: &str,
-        query: Vec<(&'static str, String)>,
+        query: Vec<(String, String)>,
     ) -> Result<T, RequestFailure> {
         self.pace_request().await;
         let url = format!("{}{}", self.base_url, path);
@@ -193,7 +201,7 @@ pub struct ListNotesParams {
 }
 
 impl ListNotesParams {
-    fn to_query(&self) -> Vec<(&'static str, String)> {
+    fn to_query(&self) -> Vec<(String, String)> {
         let mut query = Vec::new();
         push_opt(&mut query, "created_before", &self.created_before);
         push_opt(&mut query, "created_after", &self.created_after);
@@ -201,7 +209,7 @@ impl ListNotesParams {
         push_opt(&mut query, "folder_id", &self.folder_id);
         push_opt(&mut query, "cursor", &self.cursor);
         if let Some(page_size) = self.page_size {
-            query.push(("page_size", page_size.to_string()));
+            query.push(("page_size".to_string(), page_size.to_string()));
         }
         query
     }
@@ -214,19 +222,19 @@ pub struct ListFoldersParams {
 }
 
 impl ListFoldersParams {
-    fn to_query(&self) -> Vec<(&'static str, String)> {
+    fn to_query(&self) -> Vec<(String, String)> {
         let mut query = Vec::new();
         push_opt(&mut query, "cursor", &self.cursor);
         if let Some(page_size) = self.page_size {
-            query.push(("page_size", page_size.to_string()));
+            query.push(("page_size".to_string(), page_size.to_string()));
         }
         query
     }
 }
 
-fn push_opt(query: &mut Vec<(&'static str, String)>, name: &'static str, value: &Option<String>) {
+fn push_opt(query: &mut Vec<(String, String)>, name: &str, value: &Option<String>) {
     if let Some(value) = value.as_ref().filter(|value| !value.trim().is_empty()) {
-        query.push((name, value.clone()));
+        query.push((name.to_string(), value.clone()));
     }
 }
 

@@ -50,6 +50,7 @@ granola notes list --output json --compact --fields id,title,owner.email
 - `granola auth login [--validate] [--key KEY | --key-stdin]`
 - `granola auth logout [--force]`
 - `granola auth status [--validate]`
+- `granola api get /v1/notes --query page_size=5`
 - `granola notes list [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--no-truncate]`
 - `granola notes get NOTE_ID [--include transcript]`
 - `granola notes open NOTE_ID [--print]`

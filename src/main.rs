@@ -50,6 +50,8 @@ pub enum OutputFormat {
 enum Command {
     /// Manage Granola API authentication.
     Auth(commands::auth::AuthCommand),
+    /// Make guarded raw Granola API requests.
+    Api(commands::api::ApiCommand),
     /// List and retrieve Granola notes.
     Notes(commands::notes::NotesCommand),
     /// List accessible Granola folders.
@@ -89,6 +91,7 @@ async fn run(
 ) -> Result<(), CliError> {
     match command {
         Command::Auth(command) => commands::auth::handle(command, api_key_override, output).await,
+        Command::Api(command) => commands::api::handle(command, api_key_override, output).await,
         Command::Notes(command) => commands::notes::handle(command, api_key_override, output).await,
         Command::Folders(command) => {
             commands::folders::handle(command, api_key_override, output).await

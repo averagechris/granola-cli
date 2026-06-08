@@ -6,6 +6,7 @@ Use JSON for scripts and AI agents:
 granola notes list --output json --compact
 granola folders list --output json --fields id,name
 granola notes get not_AAAAAAAAAAAAAA --include transcript --output json
+granola api get /v1/notes --query page_size=5 --output json
 ```
 
 ## Field selection
