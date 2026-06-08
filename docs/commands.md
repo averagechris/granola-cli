@@ -30,6 +30,7 @@ granola notes list \
   [--limit N]
 
 granola notes get NOTE_ID [--include transcript]
+granola notes open NOTE_ID [--print]
 ```
 
 ## Folders

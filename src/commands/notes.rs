@@ -3,6 +3,7 @@ use crate::error::CliError;
 use crate::output::{print_json, OutputOptions};
 use crate::types::{Note, NoteSummary};
 use clap::{Args, Subcommand};
+use serde_json::json;
 use tabled::{Table, Tabled};
 
 #[derive(Debug, Args)]
@@ -17,6 +18,8 @@ enum NotesSubcommand {
     List(ListNotesCommand),
     /// Retrieve one note by ID.
     Get(GetNoteCommand),
+    /// Open a note in the browser.
+    Open(OpenNoteCommand),
 }
 
 #[derive(Debug, Args)]
@@ -56,6 +59,15 @@ struct GetNoteCommand {
     include: Option<String>,
 }
 
+#[derive(Debug, Args)]
+struct OpenNoteCommand {
+    /// Granola note ID, e.g. not_1d3tmYTlCICgjy.
+    note_id: String,
+    /// Print the note URL instead of opening it.
+    #[arg(long)]
+    print: bool,
+}
+
 pub async fn handle(
     command: NotesCommand,
     api_key_override: Option<String>,
@@ -67,6 +79,7 @@ pub async fn handle(
     match command.command {
         NotesSubcommand::List(command) => list_notes(&client, command, output).await,
         NotesSubcommand::Get(command) => get_note(&client, command, output).await,
+        NotesSubcommand::Open(command) => open_note(&client, command, output).await,
     }
 }
 
@@ -128,6 +141,39 @@ async fn get_note(
     }
 
     print_note_detail(&note);
+    Ok(())
+}
+
+async fn open_note(
+    client: &GranolaClient,
+    command: OpenNoteCommand,
+    output: &OutputOptions,
+) -> Result<(), CliError> {
+    let note = client.get_note(&command.note_id, false).await?;
+
+    if command.print {
+        if output.is_json() {
+            return print_json(
+                &json!({ "id": note.id, "url": note.web_url, "opened": false }),
+                output,
+            );
+        }
+        println!("{}", note.web_url);
+        return Ok(());
+    }
+
+    open::that(&note.web_url)
+        .map_err(|error| CliError::general(format!("failed to open note URL: {error}")))?;
+
+    if output.is_json() {
+        return print_json(
+            &json!({ "id": note.id, "url": note.web_url, "opened": true }),
+            output,
+        );
+    }
+    if !output.quiet {
+        println!("opened {}", note.web_url);
+    }
     Ok(())
 }
 

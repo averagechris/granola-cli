@@ -52,6 +52,7 @@ granola notes list --output json --compact --fields id,title,owner.email
 - `granola auth status [--validate]`
 - `granola notes list [--created-before DATE] [--created-after DATE] [--updated-after DATE] [--folder-id FOL_ID] [--cursor CURSOR] [--page-size N] [--all] [--limit N]`
 - `granola notes get NOTE_ID [--include transcript]`
+- `granola notes open NOTE_ID [--print]`
 - `granola folders list [--cursor CURSOR] [--page-size N] [--all] [--limit N]`
 - `granola export note NOTE_ID [--format markdown|json|txt|transcript] [--include-transcript] [-o FILE] [--force|--skip-existing]`
 - `granola export notes [--format jsonl|markdown|json] [-o FILE | --output-dir DIR] [--include-transcript] [--force|--skip-existing]`
