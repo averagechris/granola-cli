@@ -1,0 +1,8 @@
+# Source of truth for CLI binary naming.
+
+[cli]
+# Published executable name for docs and user workflows.
+program_name = "granola"
+
+# Cargo package name.
+package_name = "granola-cli"

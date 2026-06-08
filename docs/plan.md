@@ -1,0 +1,46 @@
+# Implementation Plan
+
+This is an execution checklist, not a phase plan.
+
+- Generate `Cargo.lock` inside the Nix shell.
+- Add foundational modules:
+  - `api` for HTTP client, auth header injection, error mapping, and rate-limit handling
+  - `auth` for login/logout/status and keyring integration
+  - `config` for non-secret profile/config metadata
+  - `output` for table/json/compact/field selection
+  - `pagination` for cursor traversal
+  - `types` for Granola API models
+- Implement auth commands:
+  - `granola auth login`
+  - `granola auth logout`
+  - `granola auth status`
+  - `granola auth open` to open Granola API-key docs/settings if a stable URL exists
+- Implement note commands:
+  - `granola notes list`
+  - `granola notes get NOTE_ID`
+  - filters: `--created-before`, `--created-after`, `--updated-after`, `--folder-id`
+  - pagination: `--page-size`, `--cursor`, `--all`
+  - detail flag: `--include transcript`
+- Implement folder commands:
+  - `granola folders list`
+  - pagination: `--page-size`, `--cursor`, `--all`
+- Implement export commands:
+  - `granola export note NOTE_ID --format markdown|json|txt`
+  - `granola export notes --created-after ... --format jsonl|markdown`
+  - safe file writes via temp file then atomic rename
+- Implement command ergonomics:
+  - shell completions
+  - `doctor`
+  - `agent`
+  - concise aliases only after the base names settle
+- Add tests:
+  - model deserialization fixtures from documented examples
+  - auth/keyring abstraction tests with an in-memory test backend
+  - output formatting tests
+  - pagination tests
+  - HTTP tests with mocked 200, 400, 401, 404, and 429 responses
+- Add docs as commands land:
+  - README quick start
+  - command reference
+  - JSON examples
+  - agent usage guide
