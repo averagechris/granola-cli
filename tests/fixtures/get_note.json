@@ -1,0 +1,23 @@
+{
+  "id": "not_AAAAAAAAAAAAAA",
+  "object": "note",
+  "title": "Redacted Meeting",
+  "owner": {
+    "name": "Redacted Owner",
+    "email": "owner@example.com"
+  },
+  "created_at": "2026-06-08T20:00:07.742Z",
+  "updated_at": "2026-06-08T20:51:40.310Z",
+  "web_url": "https://notes.granola.ai/d/redacted",
+  "calendar_event": null,
+  "attendees": [
+    {
+      "name": null,
+      "email": "attendee@example.com"
+    }
+  ],
+  "folder_membership": [],
+  "summary_text": "Redacted summary text.",
+  "summary_markdown": null,
+  "transcript": null
+}

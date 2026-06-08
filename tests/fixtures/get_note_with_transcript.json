@@ -1,0 +1,54 @@
+{
+  "id": "not_BBBBBBBBBBBBBB",
+  "object": "note",
+  "title": null,
+  "owner": {
+    "name": "Redacted Owner",
+    "email": "owner@example.com"
+  },
+  "created_at": "2026-06-08T20:00:07.742Z",
+  "updated_at": "2026-06-08T20:51:40.310Z",
+  "web_url": "https://notes.granola.ai/d/redacted",
+  "calendar_event": {
+    "event_title": "Redacted Calendar Event",
+    "invitees": [
+      {
+        "email": "invitee@example.com"
+      }
+    ],
+    "organiser": "organiser@example.com",
+    "calendar_event_id": "redacted-calendar-event-id",
+    "scheduled_start_time": "2026-06-08T20:00:00Z",
+    "scheduled_end_time": "2026-06-08T20:30:00Z"
+  },
+  "attendees": [],
+  "folder_membership": [
+    {
+      "id": "fol_AAAAAAAAAAAAAA",
+      "object": "folder",
+      "name": "Redacted Team Folder",
+      "parent_folder_id": null
+    }
+  ],
+  "summary_text": "Redacted summary text.",
+  "summary_markdown": "# Redacted Summary\n\n- Redacted bullet",
+  "transcript": [
+    {
+      "speaker": {
+        "source": "microphone",
+        "diarization_label": "Speaker A"
+      },
+      "text": "Redacted transcript text.",
+      "start_time": "2026-06-08T20:00:07.742Z",
+      "end_time": "2026-06-08T20:00:12.742Z"
+    },
+    {
+      "speaker": {
+        "source": "speaker"
+      },
+      "text": "Redacted transcript response.",
+      "start_time": "2026-06-08T20:00:13.742Z",
+      "end_time": "2026-06-08T20:00:17.742Z"
+    }
+  ]
+}

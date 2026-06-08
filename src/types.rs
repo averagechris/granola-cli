@@ -92,21 +92,53 @@ mod tests {
 
     #[test]
     fn deserializes_list_notes_response() {
-        let raw = r#"{
-          "notes": [{
-            "id": "not_1d3tmYTlCICgjy",
-            "object": "note",
-            "title": "Quarterly yoghurt budget review",
-            "owner": { "name": "Oat Benson", "email": "oat@granola.ai" },
-            "created_at": "2026-01-27T15:30:00Z",
-            "updated_at": "2026-01-27T16:45:00Z"
-          }],
-          "hasMore": false,
-          "cursor": null
-        }"#;
+        let raw = include_str!("../tests/fixtures/list_notes.json");
 
         let response: ListNotesResponse = serde_json::from_str(raw).unwrap();
-        assert_eq!(response.notes[0].id, "not_1d3tmYTlCICgjy");
+        assert_eq!(response.notes[0].id, "not_AAAAAAAAAAAAAA");
+        assert!(response.has_more);
+        assert_eq!(response.cursor.as_deref(), Some("redacted-cursor"));
+    }
+
+    #[test]
+    fn deserializes_empty_list_notes_response() {
+        let raw = include_str!("../tests/fixtures/list_notes_empty.json");
+        let response: ListNotesResponse = serde_json::from_str(raw).unwrap();
+        assert!(response.notes.is_empty());
         assert!(!response.has_more);
+    }
+
+    #[test]
+    fn deserializes_list_folders_response() {
+        let raw = include_str!("../tests/fixtures/list_folders.json");
+        let response: ListFoldersResponse = serde_json::from_str(raw).unwrap();
+        assert_eq!(response.folders.len(), 2);
+        assert_eq!(
+            response.folders[1].parent_folder_id.as_deref(),
+            Some("fol_AAAAAAAAAAAAAA")
+        );
+    }
+
+    #[test]
+    fn deserializes_note_with_null_optional_fields() {
+        let raw = include_str!("../tests/fixtures/get_note.json");
+        let note: Note = serde_json::from_str(raw).unwrap();
+        assert_eq!(note.id, "not_AAAAAAAAAAAAAA");
+        assert!(note.calendar_event.is_none());
+        assert!(note.summary_markdown.is_none());
+        assert!(note.transcript.is_none());
+    }
+
+    #[test]
+    fn deserializes_note_with_transcript_variants() {
+        let raw = include_str!("../tests/fixtures/get_note_with_transcript.json");
+        let note: Note = serde_json::from_str(raw).unwrap();
+        let transcript = note.transcript.expect("transcript should be present");
+        assert_eq!(transcript.len(), 2);
+        assert_eq!(
+            transcript[0].speaker.diarization_label.as_deref(),
+            Some("Speaker A")
+        );
+        assert!(transcript[1].speaker.diarization_label.is_none());
     }
 }

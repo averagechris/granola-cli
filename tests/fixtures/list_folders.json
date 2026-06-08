@@ -1,0 +1,18 @@
+{
+  "folders": [
+    {
+      "id": "fol_AAAAAAAAAAAAAA",
+      "object": "folder",
+      "name": "Redacted Team Folder",
+      "parent_folder_id": null
+    },
+    {
+      "id": "fol_BBBBBBBBBBBBBB",
+      "object": "folder",
+      "name": "Redacted Child Folder",
+      "parent_folder_id": "fol_AAAAAAAAAAAAAA"
+    }
+  ],
+  "hasMore": false,
+  "cursor": null
+}
