@@ -16,6 +16,11 @@ pub struct GranolaClient {
 
 impl GranolaClient {
     pub fn new(api_key: String) -> Result<Self, CliError> {
+        Self::with_base_url(DEFAULT_BASE_URL.to_string(), api_key)
+    }
+
+    #[cfg(test)]
+    fn with_base_url(base_url: String, api_key: String) -> Result<Self, CliError> {
         let http = reqwest::Client::builder()
             .user_agent(format!("granola-cli/{}", env!("CARGO_PKG_VERSION")))
             .timeout(Duration::from_secs(30))
@@ -23,7 +28,7 @@ impl GranolaClient {
             .build()?;
 
         Ok(Self {
-            base_url: DEFAULT_BASE_URL.to_string(),
+            base_url,
             api_key,
             http,
         })
@@ -185,11 +190,144 @@ pub fn resolve_api_key(api_key_override: Option<String>) -> Result<String, CliEr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::ErrorKind;
+    use wiremock::matchers::{header, method, path, query_param};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[test]
     fn validates_granola_page_size_bounds() {
         assert_eq!(validate_page_size(1).unwrap(), 1);
         assert_eq!(validate_page_size(30).unwrap(), 30);
         assert!(validate_page_size(31).is_err());
+    }
+
+    #[tokio::test]
+    async fn list_notes_sends_auth_and_query_params() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/notes"))
+            .and(header("authorization", "Bearer test-key"))
+            .and(query_param("page_size", "2"))
+            .and(query_param("created_after", "2026-06-01"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(
+                include_str!("../tests/fixtures/list_notes.json"),
+                "application/json",
+            ))
+            .mount(&server)
+            .await;
+
+        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string()).unwrap();
+        let response = client
+            .list_notes(&ListNotesParams {
+                created_after: Some("2026-06-01".to_string()),
+                page_size: Some(2),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(response.notes.len(), 1);
+        assert_eq!(response.notes[0].id, "not_AAAAAAAAAAAAAA");
+    }
+
+    #[tokio::test]
+    async fn get_note_deserializes_success_response() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/notes/not_AAAAAAAAAAAAAA"))
+            .and(query_param("include", "transcript"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(
+                include_str!("../tests/fixtures/get_note_with_transcript.json"),
+                "application/json",
+            ))
+            .mount(&server)
+            .await;
+
+        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string()).unwrap();
+        let note = client.get_note("not_AAAAAAAAAAAAAA", true).await.unwrap();
+
+        assert_eq!(note.id, "not_BBBBBBBBBBBBBB");
+        assert_eq!(note.transcript.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn list_folders_deserializes_success_response() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/folders"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(
+                include_str!("../tests/fixtures/list_folders.json"),
+                "application/json",
+            ))
+            .mount(&server)
+            .await;
+
+        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string()).unwrap();
+        let response = client
+            .list_folders(&ListFoldersParams::default())
+            .await
+            .unwrap();
+
+        assert_eq!(response.folders.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn maps_auth_errors() {
+        let err = error_for_status(StatusCode::UNAUTHORIZED, None).await;
+        assert_eq!(err.kind, ErrorKind::Auth);
+        assert_eq!(err.code(), 3);
+    }
+
+    #[tokio::test]
+    async fn maps_not_found_errors() {
+        let err = error_for_status(StatusCode::NOT_FOUND, None).await;
+        assert_eq!(err.kind, ErrorKind::NotFound);
+        assert_eq!(err.code(), 2);
+    }
+
+    #[tokio::test]
+    async fn maps_rate_limit_errors_with_retry_after() {
+        let err = error_for_status(StatusCode::TOO_MANY_REQUESTS, Some("7")).await;
+        assert_eq!(err.kind, ErrorKind::RateLimited);
+        assert_eq!(err.code(), 4);
+        assert_eq!(err.retry_after, Some(7));
+    }
+
+    #[tokio::test]
+    async fn malformed_json_is_a_general_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/folders"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("not-json"))
+            .mount(&server)
+            .await;
+
+        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string()).unwrap();
+        let err = client
+            .list_folders(&ListFoldersParams::default())
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.kind, ErrorKind::General);
+    }
+
+    async fn error_for_status(status: StatusCode, retry_after: Option<&str>) -> CliError {
+        let server = MockServer::start().await;
+        let mut response = ResponseTemplate::new(status.as_u16())
+            .set_body_json(serde_json::json!({ "message": "redacted error" }));
+        if let Some(retry_after) = retry_after {
+            response = response.append_header("retry-after", retry_after);
+        }
+        Mock::given(method("GET"))
+            .and(path("/v1/folders"))
+            .respond_with(response)
+            .mount(&server)
+            .await;
+
+        let client = GranolaClient::with_base_url(server.uri(), "test-key".to_string()).unwrap();
+        client
+            .list_folders(&ListFoldersParams::default())
+            .await
+            .unwrap_err()
     }
 }
