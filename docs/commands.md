@@ -1,0 +1,63 @@
+# Command Reference
+
+Global flags available on every command:
+
+- `--output table|json`
+- `--compact`
+- `--fields a,b,c`
+- `--quiet`
+- `--api-key KEY` for one process only
+
+## Auth
+
+```bash
+granola auth login [--validate] [--key KEY | --key-stdin]
+granola auth status [--validate]
+granola auth logout [--force]
+```
+
+## Notes
+
+```bash
+granola notes list \
+  [--created-before DATE] \
+  [--created-after DATE] \
+  [--updated-after DATE] \
+  [--folder-id FOL_ID] \
+  [--cursor CURSOR] \
+  [--page-size N] \
+  [--all] \
+  [--limit N]
+
+granola notes get NOTE_ID [--include transcript]
+```
+
+## Folders
+
+```bash
+granola folders list [--cursor CURSOR] [--page-size N] [--all] [--limit N]
+```
+
+## Export
+
+```bash
+granola export note NOTE_ID \
+  [--format markdown|json|txt|transcript] \
+  [--include-transcript] \
+  [-o FILE] \
+  [--force]
+
+granola export notes \
+  [--format jsonl|markdown|json] \
+  [--created-after DATE] \
+  [-o FILE] \
+  [--force]
+```
+
+## Utilities
+
+```bash
+granola doctor
+granola agent
+granola completions zsh|bash|fish|powershell|elvish
+```

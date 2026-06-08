@@ -55,6 +55,7 @@ granola notes list --output json --compact --fields id,title,owner.email
 - `granola folders list [--cursor CURSOR] [--page-size N] [--all] [--limit N]`
 - `granola export note NOTE_ID [--format markdown|json|txt|transcript] [--include-transcript] [-o FILE] [--force]`
 - `granola export notes [--format jsonl|markdown|json] [-o FILE] [--force]`
+- `granola completions zsh|bash|fish|powershell|elvish`
 - `granola doctor`
 - `granola agent`
 
@@ -78,6 +79,12 @@ granola auth login --key-stdin --validate < ./scratch/token
 - [Decisions](docs/decisions.md)
 - [Implementation plan](docs/plan.md)
 - [Granola API notes](docs/api-notes.md)
+- [Command reference](docs/commands.md)
+- [Authentication](docs/auth.md)
+- [JSON output](docs/json.md)
+- [Exporting notes](docs/export.md)
+- [Shell completions](docs/shell-completions.md)
+- [Troubleshooting](docs/troubleshooting.md)
 - [ADRs](docs/adr/)
 
 ## Granola API facts

@@ -29,7 +29,7 @@ This is an execution checklist, not a phase plan.
   - `granola export note NOTE_ID --format markdown|json|txt`
   - `granola export notes --created-after ... --format jsonl|markdown`
   - safe file writes via temp file then atomic rename
-- Implement command ergonomics:
+- [x] Implement command ergonomics:
   - shell completions
   - `doctor`
   - `agent`
@@ -40,7 +40,7 @@ This is an execution checklist, not a phase plan.
   - output formatting tests
   - pagination tests
   - HTTP tests with mocked 200, 400, 401, 404, and 429 responses
-- Add docs as commands land:
+- [x] Add docs as commands land:
   - README quick start
   - command reference
   - JSON examples

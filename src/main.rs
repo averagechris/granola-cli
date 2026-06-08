@@ -5,9 +5,11 @@ mod keyring;
 mod output;
 mod types;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
 use error::CliError;
 use output::{emit_error_json, OutputOptions};
+use std::io;
 
 #[derive(Debug, Parser)]
 #[command(name = "granola")]
@@ -56,6 +58,11 @@ enum Command {
     Export(commands::export::ExportCommand),
     /// Print agent-focused usage guidance.
     Agent,
+    /// Generate shell completion scripts.
+    Completions {
+        /// Shell to generate completions for.
+        shell: Shell,
+    },
     /// Check local CLI configuration and credential availability.
     Doctor,
 }
@@ -90,6 +97,12 @@ async fn run(
             commands::export::handle(command, api_key_override, output).await
         }
         Command::Agent => commands::agent(output),
+        Command::Completions { shell } => {
+            let mut command = Cli::command();
+            let name = command.get_name().to_string();
+            clap_complete::generate(shell, &mut command, name, &mut io::stdout());
+            Ok(())
+        }
         Command::Doctor => commands::doctor(api_key_override, output),
     }
 }
