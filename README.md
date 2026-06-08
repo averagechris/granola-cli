@@ -2,7 +2,7 @@
 
 A Rust CLI for [Granola](https://granola.ai) meeting notes, transcripts, summaries, and folders.
 
-This repository is initialized for planning-first development. The implementation should follow the developer-experience patterns from `~/projects/linear-cli`: Rust, clap-based commands, Nix dev shell, direnv, keyring-backed credentials, agent-friendly JSON output, local CI scripts, and concise docs.
+The implementation follows the developer-experience patterns from `~/projects/linear-cli`: Rust, clap-based commands, Nix dev shell, direnv, keyring-backed credentials, agent-friendly JSON output, local CI scripts, and concise docs.
 
 ## Development environment
 
@@ -23,11 +23,14 @@ nix run .#ci-test
 cargo generate-lockfile
 ```
 
-## Planned quick start
+## Quick start
 
 ```bash
 # Store API key in the OS keyring.
 granola auth login
+
+# Check auth without printing secrets.
+granola auth status --validate
 
 # List recent notes.
 granola notes list --created-after 2026-01-01 --output table
@@ -37,6 +40,34 @@ granola notes get not_1d3tmYTlCICgjy --include transcript --output json
 
 # List folders for folder-scoped note queries.
 granola folders list --output table
+
+# Agent-friendly JSON.
+granola notes list --output json --compact --fields id,title,owner.email
+```
+
+## Implemented commands
+
+- `granola auth login [--validate] [--key KEY | --key-stdin]`
+- `granola auth logout [--force]`
+- `granola auth status [--validate]`
+- `granola notes list [--created-before DATE] [--created-after DATE] [--updated-after DATE] [--folder-id FOL_ID] [--cursor CURSOR] [--page-size N] [--all] [--limit N]`
+- `granola notes get NOTE_ID [--include transcript]`
+- `granola folders list [--cursor CURSOR] [--page-size N] [--all] [--limit N]`
+- `granola doctor`
+- `granola agent`
+
+Global scriptability flags:
+
+- `--output table|json`
+- `--compact`
+- `--fields a,b,c`
+- `--quiet`
+- `--api-key KEY` for process-local auth override only
+
+For automation, prefer stdin over argv so secrets do not appear in process listings:
+
+```bash
+granola auth login --key-stdin --validate < ./scratch/token
 ```
 
 ## Planning docs
@@ -51,7 +82,7 @@ granola folders list --output table
 
 - Base URL: `https://public-api.granola.ai`
 - Auth: `Authorization: Bearer grn_...`
-- Public endpoints today: `GET /v1/notes`, `GET /v1/notes/{note_id}`, `GET /v1/folders`
+- Public endpoints implemented today: `GET /v1/notes`, `GET /v1/notes/{note_id}`, `GET /v1/folders`
 - Pagination: cursor plus `hasMore`; `page_size` max 30
 - Rate limit: burst 25 requests, sustained 5 requests/second
 - Notes appear only after AI summary and transcript generation

@@ -2,28 +2,29 @@
 
 This is an execution checklist, not a phase plan.
 
-- Generate `Cargo.lock` inside the Nix shell.
-- Add foundational modules:
-  - `api` for HTTP client, auth header injection, error mapping, and rate-limit handling
+- [x] Generate `Cargo.lock` inside the Nix shell.
+- [x] Add foundational modules:
+  - `api` for HTTP client, auth header injection, and error mapping
   - `auth` for login/logout/status and keyring integration
-  - `config` for non-secret profile/config metadata
   - `output` for table/json/compact/field selection
-  - `pagination` for cursor traversal
   - `types` for Granola API models
-- Implement auth commands:
+- [x] Implement auth commands:
   - `granola auth login`
   - `granola auth logout`
   - `granola auth status`
-  - `granola auth open` to open Granola API-key docs/settings if a stable URL exists
-- Implement note commands:
+  - `granola auth login --key-stdin` for automation without argv secret exposure
+- [x] Implement note commands:
   - `granola notes list`
   - `granola notes get NOTE_ID`
   - filters: `--created-before`, `--created-after`, `--updated-after`, `--folder-id`
-  - pagination: `--page-size`, `--cursor`, `--all`
+  - pagination: `--page-size`, `--cursor`, `--all`, `--limit`
   - detail flag: `--include transcript`
-- Implement folder commands:
+- [x] Implement folder commands:
   - `granola folders list`
-  - pagination: `--page-size`, `--cursor`, `--all`
+  - pagination: `--page-size`, `--cursor`, `--all`, `--limit`
+- [ ] Add optional `granola auth open` if a stable API-key settings URL exists.
+- [ ] Add non-secret config metadata only when there is real metadata to persist.
+- [ ] Add proactive client-side sustained rate limiting beyond 429 error mapping.
 - Implement export commands:
   - `granola export note NOTE_ID --format markdown|json|txt`
   - `granola export notes --created-after ... --format jsonl|markdown`
