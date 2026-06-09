@@ -24,6 +24,19 @@ pub struct NoteSummary {
     pub updated_at: String,
 }
 
+impl From<&Note> for NoteSummary {
+    fn from(note: &Note) -> Self {
+        Self {
+            id: note.id.clone(),
+            object: note.object.clone(),
+            title: note.title.clone(),
+            owner: note.owner.clone(),
+            created_at: note.created_at.clone(),
+            updated_at: note.updated_at.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Speaker {
     pub source: String,

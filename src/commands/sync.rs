@@ -101,20 +101,22 @@ pub async fn handle(
     }
 
     let fetched_count = fetched.len();
-    let existing = if command.replace {
-        None
+    if command.replace {
+        let cache = cache::merge_notes(None, fetched);
+        cache::save(&cache)?;
     } else {
-        cache::load()?
-    };
-    let merged = cache::merge_notes(existing, fetched);
-    cache::save(&merged)?;
-    let path = cache::cache_path()?;
+        cache::upsert_notes(&fetched)?;
+    }
+    let status = cache::status()?;
 
     let data = json!({
-        "path": path,
+        "path": status.path,
         "fetched": fetched_count,
-        "cached": merged.notes.len(),
-        "synced_at": merged.synced_at,
+        "cached": status.hydrated_notes,
+        "cached_summaries": status.summaries,
+        "cached_hydrated_notes": status.hydrated_notes,
+        "cached_transcript_notes": status.transcript_notes,
+        "synced_at": status.synced_at,
         "included_transcripts": command.include_transcripts,
     });
     if output.is_json() {
@@ -123,8 +125,8 @@ pub async fn handle(
     if !output.quiet {
         println!(
             "synced {fetched_count} note(s); cache now has {} note(s) at {}",
-            merged.notes.len(),
-            path.display()
+            status.hydrated_notes,
+            status.path.display()
         );
     }
     Ok(())

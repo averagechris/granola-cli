@@ -303,6 +303,14 @@ pub fn resolve_api_key(api_key_override: Option<String>) -> Result<String, CliEr
     })
 }
 
+pub fn try_resolve_api_key(api_key_override: Option<String>) -> Result<Option<String>, CliError> {
+    if let Some(api_key) = api_key_override.filter(|key| !key.trim().is_empty()) {
+        return Ok(Some(api_key));
+    }
+
+    crate::keyring::get_key()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

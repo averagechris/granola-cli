@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.0 - 2026-06-09
+
+### Added
+
+- SQLite-backed local cache with FTS5 search, relevance ranking, field-qualified queries, phrase searches, and transcript-aware result labels.
+- Default write-through caching for note list/get/hydrate/open and shortcut commands, with global `--no-cache` to opt out.
+- Multi-argument and stdin-powered search queries, including `granola search attendees:will "async config"` and `printf 'transcript:renewal' | granola search`.
+- Search result ergonomics that distinguish empty caches from no-match searches and report cache/index coverage.
+- Integration coverage for search argument parsing, stdin search, cache status, and cache clearing.
+
+### Changed
+
+- `granola cache status` now reports SQLite cache path, summary count, hydrated note count, transcript-indexed note count, and legacy JSON cache presence.
+- `granola cache clear` removes both the SQLite cache and legacy JSON cache file.
+- Search documentation now highlights FTS field filters, phrase queries, and cache completeness hints.
+
 ## v0.2.1 - 2026-06-09
 
 ### Fixed

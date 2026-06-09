@@ -8,6 +8,7 @@ Global flags available on every command:
 - `--quiet`
 - `--api-key KEY` for one process only
 - `--profile NAME`
+- `--no-cache` to disable automatic write-through updates to the local note cache
 
 ## Auth
 
@@ -47,8 +48,17 @@ granola notes list \
 granola notes get NOTE_ID [--include transcript]
 granola notes hydrate [NOTE_ID ...] [--ids-file FILE] [--stdin] [--include-transcript] [--jsonl]
 granola notes hydrate [list filters] [--include-transcript] [--jsonl]
-granola notes search QUERY [--limit N]
+granola notes search [--stdin] [QUERY ...] [--limit N]
 granola notes open NOTE_ID [--print]
+```
+
+Search uses the local SQLite FTS index. Query examples:
+
+```bash
+granola notes search apple
+granola notes search attendees:will "async config"
+granola notes search transcript:renewal
+printf 'attendees:will "async config"' | granola notes search
 ```
 
 ## Folders
@@ -65,7 +75,7 @@ granola recent
 granola today
 granola yesterday
 granola last [--include-transcript]
-granola search QUERY
+granola search [--stdin] [QUERY ...]
 granola show NOTE_ID
 granola open NOTE_ID
 ```

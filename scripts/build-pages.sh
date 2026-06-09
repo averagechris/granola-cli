@@ -53,6 +53,15 @@ cat > "${site_dir}/index.html" <<EOF
   <h1>granola-cli downloads</h1>
   <p>A Rust CLI for Granola meeting notes.</p>
 
+  <h2>What's new in v${version}</h2>
+  <ul>
+    <li>SQLite-backed local cache with FTS5 search and relevance ranking.</li>
+    <li>Field-qualified search queries such as <code>attendees:will "async config"</code> and <code>transcript:renewal</code>.</li>
+    <li>Search queries from multiple CLI args or stdin, for example <code>printf 'transcript:renewal' | granola search</code>.</li>
+    <li>Default write-through cache updates when listing or fetching notes, with <code>--no-cache</code> to opt out.</li>
+    <li>Clearer search output for empty caches, no-match searches, summary-only hits, hydrated hits, and transcript-indexed hits.</li>
+  </ul>
+
   <h2>Binary downloads</h2>
   <p>Current packaged version: <code>v${version}</code></p>
 EOF

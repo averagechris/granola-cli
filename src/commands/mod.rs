@@ -13,6 +13,7 @@ use crate::error::CliError;
 use crate::output::{print_json, OutputOptions};
 use clap::Args;
 use serde_json::json;
+use std::io::{self, IsTerminal, Read};
 
 #[derive(Debug, Args)]
 pub struct DoctorCommand {
@@ -131,6 +132,45 @@ pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
     Ok(())
 }
 
+pub fn resolve_search_query(parts: &[String], read_stdin: bool) -> Result<String, CliError> {
+    let stdin_text = if read_stdin || (parts.is_empty() && !io::stdin().is_terminal()) {
+        Some(read_stdin_to_string()?)
+    } else {
+        None
+    };
+
+    resolve_search_query_parts(parts, stdin_text.as_deref())
+}
+
+fn read_stdin_to_string() -> Result<String, CliError> {
+    let mut input = String::new();
+    io::stdin()
+        .read_to_string(&mut input)
+        .map_err(|error| CliError::general(format!("failed to read query from stdin: {error}")))?;
+    Ok(input)
+}
+
+fn resolve_search_query_parts(
+    parts: &[String],
+    stdin_text: Option<&str>,
+) -> Result<String, CliError> {
+    let mut query = crate::cache::normalize_search_query(parts);
+    if let Some(input) = stdin_text.map(str::trim).filter(|input| !input.is_empty()) {
+        if !query.is_empty() {
+            query.push(' ');
+        }
+        query.push_str(input);
+    }
+
+    if query.trim().is_empty() {
+        return Err(CliError::invalid_input(
+            "provide a search query as arguments or pass one on stdin",
+        ));
+    }
+
+    Ok(query)
+}
+
 pub async fn doctor(
     command: DoctorCommand,
     api_key_override: Option<String>,
@@ -235,4 +275,43 @@ pub async fn doctor(
         println!("next step: {step}");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolves_search_query_from_args_only() {
+        assert_eq!(
+            resolve_search_query_parts(
+                &["attendees:will".to_string(), "async config".to_string()],
+                None,
+            )
+            .unwrap(),
+            "attendees:will \"async config\""
+        );
+    }
+
+    #[test]
+    fn resolves_search_query_from_stdin_only() {
+        assert_eq!(
+            resolve_search_query_parts(&[], Some(" attendees:will \"async config\"\n")).unwrap(),
+            "attendees:will \"async config\""
+        );
+    }
+
+    #[test]
+    fn resolves_search_query_from_args_and_stdin() {
+        assert_eq!(
+            resolve_search_query_parts(&["attendees:will".to_string()], Some("async config\n"))
+                .unwrap(),
+            "attendees:will async config"
+        );
+    }
+
+    #[test]
+    fn rejects_empty_search_query() {
+        assert!(resolve_search_query_parts(&[], Some(" \n\t")).is_err());
+    }
 }

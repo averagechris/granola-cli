@@ -41,6 +41,10 @@ struct Cli {
     #[arg(long, global = true, value_name = "KEY")]
     api_key: Option<String>,
 
+    /// Disable automatic write-through updates to the local note cache.
+    #[arg(long, global = true)]
+    no_cache: bool,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -71,7 +75,17 @@ enum Command {
     /// Fetch the most recently updated note.
     Last(commands::shortcuts::LastCommand),
     /// Search the local note cache.
-    Search { query: String },
+    #[command(
+        long_about = "Search the local SQLite FTS index. Supports SQLite FTS5 syntax such as field filters and phrases. Examples: `granola search apple`, `granola search attendees:will async config`, `granola search attendees:will \"async config\"`, `granola search transcript:renewal`."
+    )]
+    Search {
+        /// Read additional search query text from stdin. If QUERY is omitted and stdin is piped, stdin is read automatically.
+        #[arg(long)]
+        stdin: bool,
+        /// Search query. Multiple arguments are joined, so `granola search attendees:will "async config"` works without quoting the entire query.
+        #[arg(value_name = "QUERY", num_args = 0..)]
+        query: Vec<String>,
+    },
     /// Show one note by ID.
     Show { note_id: String },
     /// Open one note in the browser.
@@ -137,7 +151,8 @@ async fn main() {
     };
     let output = OutputOptions::new(output_format, compact, cli.fields, quiet);
 
-    if let Err(err) = run(cli.command, cli.api_key, &output).await {
+    let write_through_cache = !cli.no_cache;
+    if let Err(err) = run(cli.command, cli.api_key, write_through_cache, &output).await {
         if output.is_json() {
             emit_error_json(&err, output.compact);
         } else {
@@ -150,27 +165,38 @@ async fn main() {
 async fn run(
     command: Command,
     api_key_override: Option<String>,
+    write_through_cache: bool,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     match command {
         Command::Auth(command) => commands::auth::handle(command, api_key_override, output).await,
         Command::Api(command) => commands::api::handle(command, api_key_override, output).await,
-        Command::Notes(command) => commands::notes::handle(command, api_key_override, output).await,
+        Command::Notes(command) => {
+            commands::notes::handle(command, api_key_override, write_through_cache, output).await
+        }
         Command::Folders(command) => {
             commands::folders::handle(command, api_key_override, output).await
         }
-        Command::Recent => commands::shortcuts::recent(api_key_override, output).await,
-        Command::Today => commands::shortcuts::today(api_key_override, output).await,
-        Command::Yesterday => commands::shortcuts::yesterday(api_key_override, output).await,
-        Command::Last(command) => {
-            commands::shortcuts::last(command, api_key_override, output).await
+        Command::Recent => {
+            commands::shortcuts::recent(api_key_override, write_through_cache, output).await
         }
-        Command::Search { query } => commands::shortcuts::search(query, output),
+        Command::Today => {
+            commands::shortcuts::today(api_key_override, write_through_cache, output).await
+        }
+        Command::Yesterday => {
+            commands::shortcuts::yesterday(api_key_override, write_through_cache, output).await
+        }
+        Command::Last(command) => {
+            commands::shortcuts::last(command, api_key_override, write_through_cache, output).await
+        }
+        Command::Search { query, stdin } => {
+            commands::shortcuts::search(query, stdin, api_key_override, output).await
+        }
         Command::Show { note_id } => {
-            commands::shortcuts::show(note_id, api_key_override, output).await
+            commands::shortcuts::show(note_id, api_key_override, write_through_cache, output).await
         }
         Command::Open { note_id } => {
-            commands::shortcuts::open(note_id, api_key_override, output).await
+            commands::shortcuts::open(note_id, api_key_override, write_through_cache, output).await
         }
         Command::Export(command) => {
             commands::export::handle(command, api_key_override, output).await

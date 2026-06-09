@@ -1,4 +1,6 @@
-use crate::api::{resolve_api_key, validate_page_size, GranolaClient, ListNotesParams};
+use crate::api::{
+    resolve_api_key, try_resolve_api_key, validate_page_size, GranolaClient, ListNotesParams,
+};
 use crate::cache;
 use crate::error::CliError;
 use crate::output::{print_json, OutputOptions};
@@ -144,9 +146,16 @@ struct HydrateNotesCommand {
 }
 
 #[derive(Debug, Args)]
+#[command(
+    long_about = "Search the local SQLite FTS index. Supports SQLite FTS5 syntax such as field filters and phrases. Examples: `granola notes search apple`, `granola notes search attendees:will async config`, `granola notes search attendees:will \"async config\"`, `granola notes search transcript:renewal`."
+)]
 struct SearchNotesCommand {
-    /// Case-insensitive text to search in cached titles, summaries, attendees, folders, and transcripts.
-    query: String,
+    /// Read additional search query text from stdin. If QUERY is omitted and stdin is piped, stdin is read automatically.
+    #[arg(long)]
+    stdin: bool,
+    /// Search query. Multiple arguments are joined, so `granola notes search attendees:will "async config"` works without quoting the entire query.
+    #[arg(value_name = "QUERY", num_args = 0..)]
+    query: Vec<String>,
     /// Maximum number of cached notes to return.
     #[arg(long)]
     limit: Option<usize>,
@@ -164,18 +173,27 @@ struct OpenNoteCommand {
 pub async fn handle(
     command: NotesCommand,
     api_key_override: Option<String>,
+    write_through_cache: bool,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     match command.command {
-        NotesSubcommand::Search(command) => search_notes(command, output),
+        NotesSubcommand::Search(command) => search_notes(command, api_key_override, output).await,
         command => {
             let api_key = resolve_api_key(api_key_override)?;
             let client = GranolaClient::new(api_key)?;
             match command {
-                NotesSubcommand::List(command) => list_notes(&client, command, output).await,
-                NotesSubcommand::Get(command) => get_note(&client, command, output).await,
-                NotesSubcommand::Hydrate(command) => hydrate_notes(&client, command, output).await,
-                NotesSubcommand::Open(command) => open_note(&client, command, output).await,
+                NotesSubcommand::List(command) => {
+                    list_notes(&client, command, write_through_cache, output).await
+                }
+                NotesSubcommand::Get(command) => {
+                    get_note(&client, command, write_through_cache, output).await
+                }
+                NotesSubcommand::Hydrate(command) => {
+                    hydrate_notes(&client, command, write_through_cache, output).await
+                }
+                NotesSubcommand::Open(command) => {
+                    open_note(&client, command, write_through_cache, output).await
+                }
                 NotesSubcommand::Search(_) => unreachable!(),
             }
         }
@@ -185,6 +203,7 @@ pub async fn handle(
 async fn list_notes(
     client: &GranolaClient,
     command: ListNotesCommand,
+    write_through_cache: bool,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let page_size = validate_page_size(command.page_size)?;
@@ -233,6 +252,7 @@ async fn list_notes(
     };
 
     sort_notes(&mut notes, command.sort, command.order);
+    cache_summaries_if_enabled(&notes, write_through_cache)?;
 
     if output.is_json() {
         return print_json(
@@ -251,41 +271,55 @@ async fn list_notes(
     Ok(())
 }
 
-fn search_notes(command: SearchNotesCommand, output: &OutputOptions) -> Result<(), CliError> {
-    let cache = cache::load()?.ok_or_else(|| {
+async fn search_notes(
+    command: SearchNotesCommand,
+    api_key_override: Option<String>,
+    output: &OutputOptions,
+) -> Result<(), CliError> {
+    let query = super::resolve_search_query(&command.query, command.stdin)?;
+    let status = cache::status()?;
+    let hits = cache::search(&query, command.limit)?.ok_or_else(|| {
         CliError::invalid_input(
             "no local cache found; run `granola sync --since 30d --all` before searching",
         )
     })?;
-    let mut notes: Vec<Note> = cache::search_notes(&cache, &command.query)
-        .into_iter()
-        .cloned()
-        .collect();
-
-    if let Some(limit) = command.limit {
-        notes.truncate(limit);
-    }
-    let count = notes.len();
+    let count = hits.len();
+    let warning = search_cache_warning(&status, api_key_override).await?;
 
     if output.is_json() {
         return print_json(
             &json!({
-                "query": command.query,
-                "notes": notes,
+                "query": query,
+                "results": hits,
                 "count": count,
-                "cache_synced_at": cache.synced_at,
+                "warning": warning,
+                "cache_synced_at": status.synced_at,
+                "cache": {
+                    "path": status.path,
+                    "synced_at": status.synced_at,
+                    "summaries": status.summaries,
+                    "hydrated_notes": status.hydrated_notes,
+                    "transcript_notes": status.transcript_notes,
+                    "has_unhydrated_summaries": status.summaries > status.hydrated_notes,
+                },
             }),
             output,
         );
     }
 
-    print_hydrated_note_table(&notes);
+    print_search_result_table(&hits, &query, &status);
+    if let Some(warning) =
+        warning.filter(|_| count == 0 || status.summaries > status.hydrated_notes)
+    {
+        eprintln!("hint: {warning}");
+    }
     Ok(())
 }
 
 async fn hydrate_notes(
     client: &GranolaClient,
     command: HydrateNotesCommand,
+    write_through_cache: bool,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let ids = hydrate_note_ids(client, &command).await?;
@@ -294,6 +328,7 @@ async fn hydrate_notes(
     for id in ids {
         notes.push(client.get_note(&id, command.include_transcript).await?);
     }
+    cache_notes_if_enabled(&notes, write_through_cache)?;
 
     if command.jsonl {
         for note in &notes {
@@ -422,12 +457,14 @@ fn command_has_selection_filters(command: &HydrateNotesCommand) -> bool {
 async fn get_note(
     client: &GranolaClient,
     command: GetNoteCommand,
+    write_through_cache: bool,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let include_transcript = command.include.as_deref() == Some("transcript");
     let note = client
         .get_note(&command.note_id, include_transcript)
         .await?;
+    cache_notes_if_enabled(std::slice::from_ref(&note), write_through_cache)?;
 
     if output.is_json() {
         return print_json(&note, output);
@@ -440,9 +477,11 @@ async fn get_note(
 async fn open_note(
     client: &GranolaClient,
     command: OpenNoteCommand,
+    write_through_cache: bool,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let note = client.get_note(&command.note_id, false).await?;
+    cache_notes_if_enabled(std::slice::from_ref(&note), write_through_cache)?;
 
     if command.print {
         if output.is_json() {
@@ -468,6 +507,63 @@ async fn open_note(
         println!("opened {}", note.web_url);
     }
     Ok(())
+}
+
+fn cache_summaries_if_enabled(
+    summaries: &[NoteSummary],
+    write_through_cache: bool,
+) -> Result<(), CliError> {
+    if !write_through_cache || summaries.is_empty() {
+        return Ok(());
+    }
+
+    cache::upsert_summaries(summaries)
+}
+
+fn cache_notes_if_enabled(notes: &[Note], write_through_cache: bool) -> Result<(), CliError> {
+    if !write_through_cache || notes.is_empty() {
+        return Ok(());
+    }
+
+    cache::upsert_notes(notes)
+}
+
+async fn search_cache_warning(
+    status: &cache::CacheStatus,
+    api_key_override: Option<String>,
+) -> Result<Option<String>, CliError> {
+    if status.summaries > status.hydrated_notes {
+        return Ok(Some(format!(
+            "local cache has {} listed note(s) but only {} hydrated note(s); run `granola sync --since 30d --all --include-transcripts` to search full summaries and transcripts",
+            status.summaries,
+            status.hydrated_notes
+        )));
+    }
+
+    let Some(api_key) = try_resolve_api_key(api_key_override).ok().flatten() else {
+        return Ok(None);
+    };
+    let Ok(client) = GranolaClient::new(api_key) else {
+        return Ok(None);
+    };
+    let Ok(response) = client
+        .list_notes(&ListNotesParams {
+            page_size: Some(30),
+            ..Default::default()
+        })
+        .await
+    else {
+        return Ok(None);
+    };
+
+    let has_remote_uncached_updates = response
+        .notes
+        .iter()
+        .any(|summary| !matches!(cache::contains_fresh_summary(summary), Ok(true)));
+
+    Ok(has_remote_uncached_updates.then(|| {
+        "newer or unlisted notes may not be in the local cache; run `granola sync --since 30d --all` to refresh before relying on search results".to_string()
+    }))
 }
 
 struct NoteRow {
@@ -523,6 +619,55 @@ fn print_hydrated_note_table(notes: &[Note]) {
             })
             .collect(),
     );
+}
+
+fn print_search_result_table(
+    hits: &[cache::CacheSearchHit],
+    query: &str,
+    status: &cache::CacheStatus,
+) {
+    if hits.is_empty() {
+        print_no_search_hits(query, status);
+        return;
+    }
+
+    print_rows(
+        &["id", "title", "owner", "updated_at", "cached"],
+        hits.iter()
+            .map(|hit| {
+                vec![
+                    hit.summary.id.clone(),
+                    hit.summary.title.as_deref().unwrap_or("").to_string(),
+                    hit.summary.owner.email.clone(),
+                    hit.summary.updated_at.clone(),
+                    cached_label(hit),
+                ]
+            })
+            .collect(),
+    );
+}
+
+fn print_no_search_hits(query: &str, status: &cache::CacheStatus) {
+    if status.summaries == 0 {
+        println!("No notes are cached yet. Run `granola sync --since 30d --all` to populate the local search index.");
+        return;
+    }
+
+    println!("No cached notes matched '{query}'.");
+    println!(
+        "Searched {} cached summary note(s), {} hydrated note(s), and {} transcript-indexed note(s).",
+        status.summaries, status.hydrated_notes, status.transcript_notes
+    );
+}
+
+fn cached_label(hit: &cache::CacheSearchHit) -> String {
+    if hit.cached_transcript {
+        "transcript".to_string()
+    } else if hit.cached_detail {
+        "full".to_string()
+    } else {
+        "summary".to_string()
+    }
 }
 
 fn print_rows(headers: &[&str], rows: Vec<Vec<String>>) {
