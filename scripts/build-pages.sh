@@ -22,13 +22,17 @@ if [[ ${#artifacts[@]} -eq 0 ]]; then
   exit 1
 fi
 
+artifacts_newest_first=()
+for ((i = ${#artifacts[@]} - 1; i >= 0; i--)); do
+  artifacts_newest_first+=("${artifacts[$i]}")
+done
+
 rm -rf "${site_dir}"
 mkdir -p "${site_dir}/downloads" "$(dirname "${pages_tarball}")"
 
 cp "${download_dir}"/* "${site_dir}/downloads/"
 
-latest_index=$((${#artifacts[@]} - 1))
-latest_artifact="$(basename "${artifacts[${latest_index}]}")"
+latest_artifact="$(basename "${artifacts_newest_first[0]}")"
 latest_checksum="${latest_artifact}.sha256"
 
 cat > "${site_dir}/index.html" <<EOF
@@ -53,7 +57,7 @@ cat > "${site_dir}/index.html" <<EOF
   <p>Current packaged version: <code>v${version}</code></p>
 EOF
 
-for artifact_path in "${artifacts[@]}"; do
+for artifact_path in "${artifacts_newest_first[@]}"; do
   artifact="$(basename "${artifact_path}")"
   checksum="${artifact}.sha256"
   sha="$(cut -d ' ' -f1 "${download_dir}/${checksum}")"
