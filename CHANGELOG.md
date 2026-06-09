@@ -37,6 +37,7 @@ This release focuses on making `granola` seamless for humans, scripts, and codin
 ### Fixed
 
 - `doctor` reports keyring access errors as diagnostics instead of failing before producing output.
+- The downloads page now points manual install instructions at the newest packaged artifact when multiple versions are present locally.
 
 ## v0.1.0 - 2026-06-09
 

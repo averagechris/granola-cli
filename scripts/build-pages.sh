@@ -27,7 +27,8 @@ mkdir -p "${site_dir}/downloads" "$(dirname "${pages_tarball}")"
 
 cp "${download_dir}"/* "${site_dir}/downloads/"
 
-latest_artifact="$(basename "${artifacts[0]}")"
+latest_index=$((${#artifacts[@]} - 1))
+latest_artifact="$(basename "${artifacts[${latest_index}]}")"
 latest_checksum="${latest_artifact}.sha256"
 
 cat > "${site_dir}/index.html" <<EOF
