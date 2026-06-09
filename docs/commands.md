@@ -65,6 +65,11 @@ granola export note NOTE_ID \
 granola export notes \
   [--format jsonl|markdown|json] \
   [--created-after DATE] \
+  [--since 7d] \
+  [--updated-after DATE] \
+  [--updated-since 24h] \
+  [--sort created-at|updated-at|title] \
+  [--order asc|desc] \
   [-o FILE | --output-dir DIR] \
   [--include-transcript] \
   [--force|--skip-existing]

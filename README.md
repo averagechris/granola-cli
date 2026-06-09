@@ -86,7 +86,7 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola notes open NOTE_ID [--print]`
 - `granola folders list [--cursor CURSOR] [--page-size N] [--all] [--limit N]`
 - `granola export note NOTE_ID [--format markdown|json|txt|transcript] [--include-transcript] [-o FILE] [--force|--skip-existing]`
-- `granola export notes [--format jsonl|markdown|json] [-o FILE | --output-dir DIR] [--include-transcript] [--force|--skip-existing]`
+- `granola export notes [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--format jsonl|markdown|json] [-o FILE | --output-dir DIR] [--include-transcript] [--force|--skip-existing]`
 - `granola completions zsh|bash|fish|powershell|elvish`
 - `granola doctor`
 - `granola agent`

@@ -14,6 +14,7 @@ Multi-note summary exports:
 
 ```bash
 granola export notes --created-after 2026-06-01 --format jsonl -o notes.jsonl
+granola export notes --since 30d --sort updated-at --order desc --format jsonl -o recent.jsonl
 granola export notes --folder-id FOL_ID --all --format markdown -o notes.md
 granola export notes --created-after 2026-06-01 --format markdown --output-dir ./notes --include-transcript
 granola export notes --created-after 2026-06-01 --format json --output-dir ./notes-json --skip-existing

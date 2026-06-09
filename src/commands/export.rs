@@ -2,6 +2,7 @@ use crate::api::{resolve_api_key, validate_page_size, GranolaClient, ListNotesPa
 use crate::error::CliError;
 use crate::output::{print_json, OutputOptions};
 use crate::types::{Note, NoteSummary, TranscriptItem};
+use chrono::{Duration, SecondsFormat, Utc};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json::json;
 use std::fs;
@@ -49,11 +50,17 @@ struct ExportNotesCommand {
     #[arg(long)]
     created_before: Option<String>,
     /// Return notes created after this date or date-time.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "since")]
     created_after: Option<String>,
+    /// Return notes created within a relative duration, e.g. 7d, 24h, 30m.
+    #[arg(long, conflicts_with = "created_after")]
+    since: Option<String>,
     /// Return notes updated after this date or date-time.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "updated_since")]
     updated_after: Option<String>,
+    /// Return notes updated within a relative duration, e.g. 7d, 24h, 30m.
+    #[arg(long, conflicts_with = "updated_after")]
+    updated_since: Option<String>,
     /// Return notes in this folder and child folders.
     #[arg(long)]
     folder_id: Option<String>,
@@ -69,6 +76,12 @@ struct ExportNotesCommand {
     /// Maximum number of notes to export.
     #[arg(long)]
     limit: Option<usize>,
+    /// Sort selected notes by this field before exporting.
+    #[arg(long, value_enum)]
+    sort: Option<NoteSortField>,
+    /// Sort order.
+    #[arg(long, value_enum, default_value_t = SortOrder::Desc)]
+    order: SortOrder,
     /// Export format.
     #[arg(long, value_enum, default_value_t = NotesExportFormat::Jsonl)]
     format: NotesExportFormat,
@@ -102,6 +115,19 @@ enum NotesExportFormat {
     Jsonl,
     Markdown,
     Json,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum NoteSortField {
+    CreatedAt,
+    UpdatedAt,
+    Title,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum SortOrder {
+    Asc,
+    Desc,
 }
 
 pub async fn handle(
@@ -236,10 +262,22 @@ async fn collect_note_summaries(
     command: &ExportNotesCommand,
 ) -> Result<Vec<NoteSummary>, CliError> {
     let page_size = validate_page_size(command.page_size)?;
+    let created_after = command
+        .since
+        .as_deref()
+        .map(relative_time_after)
+        .transpose()?
+        .or_else(|| command.created_after.clone());
+    let updated_after = command
+        .updated_since
+        .as_deref()
+        .map(relative_time_after)
+        .transpose()?
+        .or_else(|| command.updated_after.clone());
     let mut params = ListNotesParams {
         created_before: command.created_before.clone(),
-        created_after: command.created_after.clone(),
-        updated_after: command.updated_after.clone(),
+        created_after,
+        updated_after,
         folder_id: command.folder_id.clone(),
         cursor: command.cursor.clone(),
         page_size: Some(page_size),
@@ -267,7 +305,57 @@ async fn collect_note_summaries(
         params.cursor = Some(cursor);
     }
 
+    sort_notes(&mut notes, command.sort, command.order);
+
     Ok(notes)
+}
+
+fn sort_notes(notes: &mut [NoteSummary], sort: Option<NoteSortField>, order: SortOrder) {
+    let Some(sort) = sort else { return };
+    notes.sort_by(|left, right| {
+        let ord = match sort {
+            NoteSortField::CreatedAt => left.created_at.cmp(&right.created_at),
+            NoteSortField::UpdatedAt => left.updated_at.cmp(&right.updated_at),
+            NoteSortField::Title => left
+                .title
+                .as_deref()
+                .unwrap_or("")
+                .to_lowercase()
+                .cmp(&right.title.as_deref().unwrap_or("").to_lowercase()),
+        };
+        match order {
+            SortOrder::Asc => ord,
+            SortOrder::Desc => ord.reverse(),
+        }
+    });
+}
+
+fn relative_time_after(input: &str) -> Result<String, CliError> {
+    let input = input.trim();
+    if input.len() < 2 {
+        return Err(relative_duration_error(input));
+    }
+
+    let (amount, unit) = input.split_at(input.len() - 1);
+    let amount: i64 = amount.parse().map_err(|_| relative_duration_error(input))?;
+    if amount <= 0 {
+        return Err(relative_duration_error(input));
+    }
+
+    let duration = match unit {
+        "d" => Duration::days(amount),
+        "h" => Duration::hours(amount),
+        "m" => Duration::minutes(amount),
+        _ => return Err(relative_duration_error(input)),
+    };
+
+    Ok((Utc::now() - duration).to_rfc3339_opts(SecondsFormat::Secs, true))
+}
+
+fn relative_duration_error(input: &str) -> CliError {
+    CliError::invalid_input(format!(
+        "invalid relative duration '{input}'; use a positive value ending in d, h, or m (for example 7d, 24h, 30m)"
+    ))
 }
 
 fn write_or_print(
