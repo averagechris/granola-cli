@@ -4,7 +4,9 @@ use crate::output::{print_json, OutputOptions};
 use crate::types::{Note, NoteSummary, TranscriptItem};
 use chrono::{Duration, SecondsFormat, Utc};
 use clap::{Args, Subcommand, ValueEnum};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -33,6 +35,9 @@ struct ExportNoteCommand {
     /// Include the transcript when exporting markdown or JSON.
     #[arg(long)]
     include_transcript: bool,
+    /// Add YAML frontmatter to markdown exports.
+    #[arg(long)]
+    frontmatter: bool,
     /// Write to this file instead of stdout.
     #[arg(short, long)]
     output_file: Option<PathBuf>,
@@ -94,12 +99,29 @@ struct ExportNotesCommand {
     /// Include transcripts when writing one file per note with markdown or JSON output.
     #[arg(long)]
     include_transcript: bool,
+    /// Add YAML frontmatter to markdown exports.
+    #[arg(long)]
+    frontmatter: bool,
+    /// Skip unchanged output-dir notes using the export manifest.
+    #[arg(long)]
+    only_changed: bool,
     /// Overwrite an existing output file.
     #[arg(long)]
     force: bool,
     /// Skip files that already exist.
     #[arg(long, conflicts_with = "force")]
     skip_existing: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct ExportManifest {
+    notes: BTreeMap<String, ExportManifestEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ExportManifestEntry {
+    updated_at: String,
+    path: String,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -158,7 +180,9 @@ async fn export_note(
         .get_note(&command.note_id, include_transcript)
         .await?;
     let content = match command.format {
-        NoteExportFormat::Markdown => render_note_markdown(&note, command.include_transcript),
+        NoteExportFormat::Markdown => {
+            render_note_markdown(&note, command.include_transcript, command.frontmatter)
+        }
         NoteExportFormat::Json => serde_json::to_string_pretty(&note).map_err(CliError::from)?,
         NoteExportFormat::Txt => render_note_text(&note),
         NoteExportFormat::Transcript => {
@@ -179,6 +203,11 @@ async fn export_notes(
     command: ExportNotesCommand,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
+    if command.only_changed && command.output_dir.is_none() {
+        return Err(CliError::invalid_input(
+            "--only-changed requires --output-dir so the export manifest can be maintained",
+        ));
+    }
     let notes = collect_note_summaries(client, &command).await?;
     if let Some(output_dir) = command.output_dir.as_deref() {
         return export_notes_to_dir(client, &notes, output_dir, &command, output).await;
@@ -214,8 +243,20 @@ async fn export_notes_to_dir(
     let mut written = 0usize;
     let mut skipped = 0usize;
     let mode = WriteMode::from_flags(command.force, command.skip_existing);
+    let manifest_path = output_dir.join(".granola-export-manifest.json");
+    let mut manifest = load_export_manifest(&manifest_path)?;
 
     for summary in notes {
+        if command.only_changed {
+            if let Some(entry) = manifest.notes.get(&summary.id) {
+                let path = output_dir.join(&entry.path);
+                if entry.updated_at == summary.updated_at && path.exists() {
+                    skipped += 1;
+                    continue;
+                }
+            }
+        }
+
         let note = client
             .get_note(&summary.id, command.include_transcript)
             .await?;
@@ -226,7 +267,9 @@ async fn export_notes_to_dir(
         };
         let path = output_dir.join(safe_note_filename(&note, extension));
         let content = match command.format {
-            NotesExportFormat::Markdown => render_note_markdown(&note, command.include_transcript),
+            NotesExportFormat::Markdown => {
+                render_note_markdown(&note, command.include_transcript, command.frontmatter)
+            }
             NotesExportFormat::Json => {
                 serde_json::to_string_pretty(&note).map_err(CliError::from)?
             }
@@ -235,13 +278,29 @@ async fn export_notes_to_dir(
 
         if atomic_write(&path, &content, mode)? {
             written += 1;
+            manifest.notes.insert(
+                note.id.clone(),
+                ExportManifestEntry {
+                    updated_at: note.updated_at.clone(),
+                    path: path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                },
+            );
         } else {
             skipped += 1;
         }
     }
 
+    if command.only_changed || written > 0 {
+        save_export_manifest(&manifest_path, &manifest)?;
+    }
+
     let data = json!({
         "output_dir": output_dir,
+        "manifest": manifest_path,
         "written": written,
         "skipped": skipped,
     });
@@ -468,8 +527,33 @@ fn atomic_write(path: &Path, content: &str, mode: WriteMode) -> Result<bool, Cli
     Ok(true)
 }
 
-fn render_note_markdown(note: &Note, include_transcript: bool) -> String {
+fn render_note_markdown(note: &Note, include_transcript: bool, frontmatter: bool) -> String {
     let mut out = String::new();
+    if frontmatter {
+        out.push_str("---\n");
+        out.push_str(&format!("granola_id: {}\n", yaml_string(&note.id)));
+        out.push_str(&format!(
+            "title: {}\n",
+            yaml_string(note.title.as_deref().unwrap_or("Untitled note"))
+        ));
+        out.push_str(&format!("created_at: {}\n", yaml_string(&note.created_at)));
+        out.push_str(&format!("updated_at: {}\n", yaml_string(&note.updated_at)));
+        out.push_str(&format!("owner: {}\n", yaml_string(&note.owner.email)));
+        out.push_str(&format!("url: {}\n", yaml_string(&note.web_url)));
+        if !note.attendees.is_empty() {
+            out.push_str("attendees:\n");
+            for attendee in &note.attendees {
+                out.push_str(&format!("  - {}\n", yaml_string(&attendee.email)));
+            }
+        }
+        if !note.folder_membership.is_empty() {
+            out.push_str("folders:\n");
+            for folder in &note.folder_membership {
+                out.push_str(&format!("  - {}\n", yaml_string(&folder.name)));
+            }
+        }
+        out.push_str("---\n\n");
+    }
     out.push_str("# ");
     out.push_str(note.title.as_deref().unwrap_or("Untitled note"));
     out.push_str("\n\n");
@@ -494,6 +578,34 @@ fn render_note_markdown(note: &Note, include_transcript: bool) -> String {
     }
 
     out
+}
+
+fn yaml_string(value: &str) -> String {
+    format!("{:?}", value)
+}
+
+fn load_export_manifest(path: &Path) -> Result<ExportManifest, CliError> {
+    if !path.exists() {
+        return Ok(ExportManifest::default());
+    }
+    let content = fs::read_to_string(path).map_err(|error| {
+        CliError::general(format!(
+            "failed to read export manifest {}: {error}",
+            path.display()
+        ))
+    })?;
+    serde_json::from_str(&content).map_err(|error| {
+        CliError::general(format!(
+            "failed to parse export manifest {}: {error}",
+            path.display()
+        ))
+    })
+}
+
+fn save_export_manifest(path: &Path, manifest: &ExportManifest) -> Result<(), CliError> {
+    let content = serde_json::to_string_pretty(manifest).map_err(CliError::from)?;
+    atomic_write(path, &content, WriteMode::Force)?;
+    Ok(())
 }
 
 fn render_note_text(note: &Note) -> String {

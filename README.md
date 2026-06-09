@@ -48,7 +48,7 @@ granola --profile agent notes list --since 7d
 granola export note not_1d3tmYTlCICgjy --format markdown --include-transcript -o note.md
 
 # Export many notes, one Markdown file per note.
-granola export notes --since 30d --format markdown --output-dir ./granola-notes --include-transcript --skip-existing
+granola export notes --since 30d --format markdown --output-dir ./granola-notes --include-transcript --frontmatter --only-changed
 
 # Debug a documented Granola endpoint without exposing headers.
 granola api get /v1/notes --query page_size=5 --output json --compact
