@@ -1,4 +1,5 @@
 mod api;
+mod cache;
 mod commands;
 mod error;
 mod keyring;
@@ -58,6 +59,10 @@ enum Command {
     Folders(commands::folders::FoldersCommand),
     /// Export notes and transcripts.
     Export(commands::export::ExportCommand),
+    /// Sync notes into the local non-secret cache.
+    Sync(commands::sync::SyncCommand),
+    /// Inspect or clear the local non-secret cache.
+    Cache(commands::cache::CacheCommand),
     /// Print agent-focused usage guidance.
     Agent,
     /// Generate shell completion scripts.
@@ -99,6 +104,8 @@ async fn run(
         Command::Export(command) => {
             commands::export::handle(command, api_key_override, output).await
         }
+        Command::Sync(command) => commands::sync::handle(command, api_key_override, output).await,
+        Command::Cache(command) => commands::cache::handle(command, output),
         Command::Agent => commands::agent(output),
         Command::Completions { shell } => {
             let mut command = Cli::command();

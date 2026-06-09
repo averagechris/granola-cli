@@ -39,3 +39,13 @@ granola doctor --output json
 ```
 
 On Linux, Secret Service requires a working D-Bus/keyring daemon.
+
+## Local search returns no cache
+
+Run a sync before searching:
+
+```bash
+granola sync --since 30d --all
+```
+
+The cache is non-secret note data stored in the OS cache directory. Use `granola cache status` to inspect it and `granola cache clear` to remove it.

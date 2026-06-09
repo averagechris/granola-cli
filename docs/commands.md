@@ -46,6 +46,7 @@ granola notes list \
 granola notes get NOTE_ID [--include transcript]
 granola notes hydrate [NOTE_ID ...] [--ids-file FILE] [--stdin] [--include-transcript] [--jsonl]
 granola notes hydrate [list filters] [--include-transcript] [--jsonl]
+granola notes search QUERY [--limit N]
 granola notes open NOTE_ID [--print]
 ```
 
@@ -80,6 +81,9 @@ granola export notes \
 ## Utilities
 
 ```bash
+granola sync [--since 30d] [--all] [--include-transcripts] [--replace]
+granola cache status
+granola cache clear
 granola doctor
 granola agent
 granola completions zsh|bash|fish|powershell|elvish

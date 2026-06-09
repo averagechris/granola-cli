@@ -52,6 +52,15 @@ Agents can discover the stable command, output, error, and constraint contract w
 granola agent --output json --compact
 ```
 
+## Cached search
+
+Use the simple local cache for repeated search workflows:
+
+```bash
+granola sync --since 30d --all --include-transcripts
+granola notes search "pricing" --output json --compact --fields notes.id,notes.title,count,cache_synced_at
+```
+
 ## Error shape
 
 When `--output json` is requested, errors are emitted to stderr as JSON:

@@ -145,6 +145,7 @@ nix run .#publish-pages
 - [Authentication](docs/auth.md)
 - [JSON output](docs/json.md)
 - [Exporting notes](docs/export.md)
+- [Local cache and search](docs/cache.md)
 - [Hosted Downloads](docs/downloads.md)
 - [Shell completions](docs/shell-completions.md)
 - [Troubleshooting](docs/troubleshooting.md)

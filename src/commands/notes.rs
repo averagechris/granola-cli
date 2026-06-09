@@ -1,4 +1,5 @@
 use crate::api::{resolve_api_key, validate_page_size, GranolaClient, ListNotesParams};
+use crate::cache;
 use crate::error::CliError;
 use crate::output::{print_json, OutputOptions};
 use crate::types::{Note, NoteSummary};
@@ -23,6 +24,8 @@ enum NotesSubcommand {
     Get(GetNoteCommand),
     /// Fetch full note records for IDs or list filters.
     Hydrate(HydrateNotesCommand),
+    /// Search locally synced notes.
+    Search(SearchNotesCommand),
     /// Open a note in the browser.
     Open(OpenNoteCommand),
 }
@@ -141,6 +144,15 @@ struct HydrateNotesCommand {
 }
 
 #[derive(Debug, Args)]
+struct SearchNotesCommand {
+    /// Case-insensitive text to search in cached titles, summaries, attendees, folders, and transcripts.
+    query: String,
+    /// Maximum number of cached notes to return.
+    #[arg(long)]
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Args)]
 struct OpenNoteCommand {
     /// Granola note ID, e.g. not_1d3tmYTlCICgjy.
     note_id: String,
@@ -154,14 +166,19 @@ pub async fn handle(
     api_key_override: Option<String>,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
-    let api_key = resolve_api_key(api_key_override)?;
-    let client = GranolaClient::new(api_key)?;
-
     match command.command {
-        NotesSubcommand::List(command) => list_notes(&client, command, output).await,
-        NotesSubcommand::Get(command) => get_note(&client, command, output).await,
-        NotesSubcommand::Hydrate(command) => hydrate_notes(&client, command, output).await,
-        NotesSubcommand::Open(command) => open_note(&client, command, output).await,
+        NotesSubcommand::Search(command) => search_notes(command, output),
+        command => {
+            let api_key = resolve_api_key(api_key_override)?;
+            let client = GranolaClient::new(api_key)?;
+            match command {
+                NotesSubcommand::List(command) => list_notes(&client, command, output).await,
+                NotesSubcommand::Get(command) => get_note(&client, command, output).await,
+                NotesSubcommand::Hydrate(command) => hydrate_notes(&client, command, output).await,
+                NotesSubcommand::Open(command) => open_note(&client, command, output).await,
+                NotesSubcommand::Search(_) => unreachable!(),
+            }
+        }
     }
 }
 
@@ -231,6 +248,38 @@ async fn list_notes(
     }
 
     print_note_table(&notes, command.no_truncate);
+    Ok(())
+}
+
+fn search_notes(command: SearchNotesCommand, output: &OutputOptions) -> Result<(), CliError> {
+    let cache = cache::load()?.ok_or_else(|| {
+        CliError::invalid_input(
+            "no local cache found; run `granola sync --since 30d --all` before searching",
+        )
+    })?;
+    let mut notes: Vec<Note> = cache::search_notes(&cache, &command.query)
+        .into_iter()
+        .cloned()
+        .collect();
+
+    if let Some(limit) = command.limit {
+        notes.truncate(limit);
+    }
+    let count = notes.len();
+
+    if output.is_json() {
+        return print_json(
+            &json!({
+                "query": command.query,
+                "notes": notes,
+                "count": count,
+                "cache_synced_at": cache.synced_at,
+            }),
+            output,
+        );
+    }
+
+    print_hydrated_note_table(&notes);
     Ok(())
 }
 
