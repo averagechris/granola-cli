@@ -4,6 +4,7 @@ use crate::output::{print_json, OutputOptions};
 use crate::types::Folder;
 use clap::{Args, Subcommand};
 use serde_json::json;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Args)]
 pub struct FoldersCommand {
@@ -15,6 +16,8 @@ pub struct FoldersCommand {
 enum FoldersSubcommand {
     /// List accessible folders.
     List(ListFoldersCommand),
+    /// Print accessible folders as a tree.
+    Tree(TreeFoldersCommand),
 }
 
 #[derive(Debug, Args)]
@@ -33,6 +36,13 @@ struct ListFoldersCommand {
     limit: Option<usize>,
 }
 
+#[derive(Debug, Args)]
+struct TreeFoldersCommand {
+    /// Page size, capped by the Granola API at 30.
+    #[arg(long, default_value_t = 30)]
+    page_size: u8,
+}
+
 pub async fn handle(
     command: FoldersCommand,
     api_key_override: Option<String>,
@@ -40,7 +50,41 @@ pub async fn handle(
 ) -> Result<(), CliError> {
     match command.command {
         FoldersSubcommand::List(command) => list_folders(command, api_key_override, output).await,
+        FoldersSubcommand::Tree(command) => tree_folders(command, api_key_override, output).await,
     }
+}
+
+async fn tree_folders(
+    command: TreeFoldersCommand,
+    api_key_override: Option<String>,
+    output: &OutputOptions,
+) -> Result<(), CliError> {
+    let api_key = resolve_api_key(api_key_override)?;
+    let client = GranolaClient::new(api_key)?;
+    let page_size = validate_page_size(command.page_size)?;
+    let mut params = ListFoldersParams {
+        cursor: None,
+        page_size: Some(page_size),
+    };
+    let mut folders = Vec::new();
+
+    loop {
+        let response = client.list_folders(&params).await?;
+        folders.extend(response.folders);
+        if !response.has_more {
+            break;
+        }
+        let Some(cursor) = response.cursor else { break };
+        params.cursor = Some(cursor);
+    }
+
+    let tree = folder_tree(&folders);
+    if output.is_json() {
+        return print_json(&json!({ "folders": tree, "count": folders.len() }), output);
+    }
+
+    print_folder_tree(&folders);
+    Ok(())
 }
 
 async fn list_folders(
@@ -121,6 +165,76 @@ fn print_folder_table(folders: &[Folder]) {
                 .map(|row| vec![row.id, row.name, row.parent_folder_id])
                 .collect(),
         );
+    }
+}
+
+fn folder_tree(folders: &[Folder]) -> Vec<serde_json::Value> {
+    folders
+        .iter()
+        .map(|folder| {
+            json!({
+                "id": folder.id,
+                "name": folder.name,
+                "parent_folder_id": folder.parent_folder_id,
+                "path": folder_path(folder, folders),
+            })
+        })
+        .collect()
+}
+
+fn folder_path(folder: &Folder, folders: &[Folder]) -> String {
+    let by_id: BTreeMap<&str, &Folder> = folders
+        .iter()
+        .map(|folder| (folder.id.as_str(), folder))
+        .collect();
+    let mut names = vec![folder.name.as_str()];
+    let mut current = folder;
+    while let Some(parent) = current
+        .parent_folder_id
+        .as_deref()
+        .and_then(|parent_id| by_id.get(parent_id).copied())
+    {
+        names.push(parent.name.as_str());
+        current = parent;
+    }
+    names.reverse();
+    names.join("/")
+}
+
+fn print_folder_tree(folders: &[Folder]) {
+    if folders.is_empty() {
+        println!("No folders found");
+        return;
+    }
+
+    let mut children: BTreeMap<Option<&str>, Vec<&Folder>> = BTreeMap::new();
+    for folder in folders {
+        children
+            .entry(folder.parent_folder_id.as_deref())
+            .or_default()
+            .push(folder);
+    }
+    for siblings in children.values_mut() {
+        siblings.sort_by(|left, right| left.name.cmp(&right.name));
+    }
+
+    print_folder_children(None, &children, "");
+}
+
+fn print_folder_children(
+    parent_id: Option<&str>,
+    children: &BTreeMap<Option<&str>, Vec<&Folder>>,
+    prefix: &str,
+) {
+    let Some(siblings) = children.get(&parent_id) else {
+        return;
+    };
+    for (index, folder) in siblings.iter().enumerate() {
+        let last = index + 1 == siblings.len();
+        let connector = if last { "└── " } else { "├── " };
+        println!("{prefix}{connector}{}", folder.name);
+        let child_prefix = format!("{prefix}{}", if last { "    " } else { "│   " });
+        print_folder_children(Some(&folder.id), children, &child_prefix);
     }
 }
 

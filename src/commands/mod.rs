@@ -4,6 +4,7 @@ pub mod cache;
 pub mod export;
 pub mod folders;
 pub mod notes;
+pub mod shortcuts;
 pub mod sync;
 
 use crate::api::resolve_api_key;

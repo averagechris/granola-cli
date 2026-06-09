@@ -16,6 +16,8 @@ granola auth status --validate
 
 # List recent notes.
 granola notes list --since 7d --sort updated-at --order desc
+granola recent
+granola last --include-transcript
 
 # Get a note, including transcript, as compact JSON.
 granola notes get not_1d3tmYTlCICgjy --include transcript --output json --compact
@@ -29,6 +31,7 @@ granola notes open not_1d3tmYTlCICgjy --print
 
 # List folders for folder-scoped note queries.
 granola folders list
+granola folders tree
 
 # Agent-friendly JSON with field projection.
 granola notes list --output json --compact --fields notes.id,notes.title,notes.owner.email,count,has_more,cursor
@@ -92,6 +95,8 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola notes hydrate [NOTE_ID ... | --ids-file FILE | --stdin | list filters] [--include-transcript] [--jsonl]`
 - `granola notes open NOTE_ID [--print]`
 - `granola folders list [--cursor CURSOR] [--page-size N] [--all] [--limit N]`
+- `granola folders tree`
+- `granola recent|today|yesterday|last|search|show|open`
 - `granola export note NOTE_ID [--format markdown|json|txt|transcript] [--include-transcript] [-o FILE] [--force|--skip-existing]`
 - `granola export notes [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--format jsonl|markdown|json] [-o FILE | --output-dir DIR] [--include-transcript] [--force|--skip-existing]`
 - `granola completions zsh|bash|fish|powershell|elvish`

@@ -54,6 +54,19 @@ granola notes open NOTE_ID [--print]
 
 ```bash
 granola folders list [--cursor CURSOR] [--page-size N] [--all] [--limit N]
+granola folders tree [--page-size N]
+```
+
+## Shortcuts
+
+```bash
+granola recent
+granola today
+granola yesterday
+granola last [--include-transcript]
+granola search QUERY
+granola show NOTE_ID
+granola open NOTE_ID
 ```
 
 ## Export

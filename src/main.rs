@@ -57,6 +57,20 @@ enum Command {
     Notes(commands::notes::NotesCommand),
     /// List accessible Granola folders.
     Folders(commands::folders::FoldersCommand),
+    /// List notes from the last 7 days.
+    Recent,
+    /// List notes created today.
+    Today,
+    /// List notes created yesterday.
+    Yesterday,
+    /// Fetch the most recently updated note.
+    Last(commands::shortcuts::LastCommand),
+    /// Search the local note cache.
+    Search { query: String },
+    /// Show one note by ID.
+    Show { note_id: String },
+    /// Open one note in the browser.
+    Open { note_id: String },
     /// Export notes and transcripts.
     Export(commands::export::ExportCommand),
     /// Sync notes into the local non-secret cache.
@@ -100,6 +114,19 @@ async fn run(
         Command::Notes(command) => commands::notes::handle(command, api_key_override, output).await,
         Command::Folders(command) => {
             commands::folders::handle(command, api_key_override, output).await
+        }
+        Command::Recent => commands::shortcuts::recent(api_key_override, output).await,
+        Command::Today => commands::shortcuts::today(api_key_override, output).await,
+        Command::Yesterday => commands::shortcuts::yesterday(api_key_override, output).await,
+        Command::Last(command) => {
+            commands::shortcuts::last(command, api_key_override, output).await
+        }
+        Command::Search { query } => commands::shortcuts::search(query, output),
+        Command::Show { note_id } => {
+            commands::shortcuts::show(note_id, api_key_override, output).await
+        }
+        Command::Open { note_id } => {
+            commands::shortcuts::open(note_id, api_key_override, output).await
         }
         Command::Export(command) => {
             commands::export::handle(command, api_key_override, output).await
