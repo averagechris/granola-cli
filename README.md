@@ -2,64 +2,80 @@
 
 A Rust CLI for [Granola](https://granola.ai) meeting notes, transcripts, summaries, and folders.
 
-The implementation follows the developer-experience patterns from `~/projects/linear-cli`: Rust, clap-based commands, Nix dev shell, direnv, keyring-backed credentials, agent-friendly JSON output, local CI scripts, and concise docs.
-
-## Development environment
+## Usage examples
 
 ```bash
-direnv allow
-nix develop
+# Store your Granola API key in the OS keyring.
+granola auth login --validate
 
-cargo fmt --all
-cargo test
-nix run .#ci-fmt
-nix run .#ci-clippy
-nix run .#ci-test
-nix run .#ci-deny
-nix run .#ci-audit
-```
-
-## Hosted downloads
-
-For non-Nix users, build and publish a SourceHut Pages download site:
-
-```bash
-nix run .#package-macos
-nix run .#build-pages
-nix run .#publish-pages
-```
-
-See [Hosted Downloads](docs/downloads.md).
-
-`Cargo.lock` is intentionally not hand-written. Generate it from inside the Nix shell when implementation begins:
-
-```bash
-cargo generate-lockfile
-```
-
-## Quick start
-
-```bash
-# Store API key in the OS keyring.
-granola auth login
+# Or, for automation, avoid putting the key in argv/shell history.
+granola auth login --key-stdin --validate < ./token
 
 # Check auth without printing secrets.
 granola auth status --validate
 
 # List recent notes.
-granola notes list --created-after 2026-01-01 --output table
+granola notes list --since 7d --sort updated-at --order desc
 
-# Get a note, including transcript.
-granola notes get not_1d3tmYTlCICgjy --include transcript --output json
+# Get a note, including transcript, as compact JSON.
+granola notes get not_1d3tmYTlCICgjy --include transcript --output json --compact
+
+# Open a note in the browser, or print its URL for scripts.
+granola notes open not_1d3tmYTlCICgjy
+granola notes open not_1d3tmYTlCICgjy --print
 
 # List folders for folder-scoped note queries.
-granola folders list --output table
+granola folders list
 
-# Agent-friendly JSON.
+# Agent-friendly JSON with field projection.
 granola notes list --output json --compact --fields id,title,owner.email
+
+# Export one note to Markdown.
+granola export note not_1d3tmYTlCICgjy --format markdown --include-transcript -o note.md
+
+# Export many notes, one Markdown file per note.
+granola export notes --since 30d --format markdown --output-dir ./granola-notes --include-transcript --skip-existing
+
+# Debug a documented Granola endpoint without exposing headers.
+granola api get /v1/notes --query page_size=5 --output json --compact
 ```
 
-## Implemented commands
+## Installation
+
+### Nix
+
+```bash
+nix run sourcehut:averagechris/granola-cli
+nix profile install sourcehut:averagechris/granola-cli
+```
+
+### Binary downloads
+
+Hosted downloads for non-Nix users are published on SourceHut Pages:
+
+```text
+https://averagechris.srht.site/granola-cli/
+```
+
+Current macOS arm64 artifact path after publishing:
+
+```text
+https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.1.0-aarch64-darwin.tar.gz
+```
+
+Manual install example:
+
+```bash
+curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.1.0-aarch64-darwin.tar.gz
+curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.1.0-aarch64-darwin.tar.gz.sha256
+sha256sum -c granola-cli-v0.1.0-aarch64-darwin.tar.gz.sha256
+tar -xzf granola-cli-v0.1.0-aarch64-darwin.tar.gz
+install -m 0755 granola-cli-v0.1.0-aarch64-darwin/granola ~/.local/bin/granola
+```
+
+See [Hosted Downloads](docs/downloads.md).
+
+## Command overview
 
 - `granola auth login [--validate] [--key KEY | --key-stdin]`
 - `granola auth logout [--force]`
@@ -83,11 +99,34 @@ Global scriptability flags:
 - `--quiet`
 - `--api-key KEY` for process-local auth override only
 
-For automation, prefer stdin over argv so secrets do not appear in process listings:
+## Contributing
+
+The implementation follows the developer-experience patterns from `~/projects/linear-cli`: Rust, clap-based commands, Nix dev shell, direnv, keyring-backed credentials, agent-friendly JSON output, local CI scripts, and concise docs.
+
+### Development environment
 
 ```bash
-granola auth login --key-stdin --validate < ./scratch/token
+direnv allow
+nix develop
+
+cargo fmt --all
+cargo test
+nix run .#ci-fmt
+nix run .#ci-clippy
+nix run .#ci-test
+nix run .#ci-deny
+nix run .#ci-audit
 ```
+
+### Hosted download publishing
+
+```bash
+nix run .#package-macos
+nix run .#build-pages
+nix run .#publish-pages
+```
+
+`nix run .#publish-pages` requires `hut` configuration. Configure it once with `nix run nixpkgs#hut -- init`.
 
 ## Planning docs
 

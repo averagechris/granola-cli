@@ -48,9 +48,6 @@ cat > "${site_dir}/index.html" <<EOF
   <h1>granola-cli downloads</h1>
   <p>A Rust CLI for Granola meeting notes.</p>
 
-  <h2>Recommended install</h2>
-  <pre><code>nix run sourcehut:averagechris/granola-cli</code></pre>
-
   <h2>Binary downloads</h2>
   <p>Current packaged version: <code>v${version}</code></p>
 EOF
@@ -78,6 +75,11 @@ curl -LO https://averagechris.srht.site/granola-cli/downloads/${latest_checksum}
 sha256sum -c ${latest_checksum}
 tar -xzf ${latest_artifact}
 install -m 0755 ${latest_artifact%.tar.gz}/granola ~/.local/bin/granola</code></pre>
+
+  <h2>Nix install</h2>
+  <p>If you use Nix, this is the easiest path:</p>
+  <pre><code>nix run sourcehut:averagechris/granola-cli
+nix profile install sourcehut:averagechris/granola-cli</code></pre>
 
   <h2>Source</h2>
   <p><a href="https://git.sr.ht/~averagechris/granola-cli">git.sr.ht/~averagechris/granola-cli</a></p>
