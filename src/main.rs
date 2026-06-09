@@ -1,6 +1,7 @@
 mod api;
 mod cache;
 mod commands;
+mod config;
 mod error;
 mod keyring;
 mod output;
@@ -17,8 +18,8 @@ use std::io;
 #[command(about = "A Rust CLI for Granola meeting notes")]
 struct Cli {
     /// Output format for data commands.
-    #[arg(long, value_enum, default_value_t = OutputFormat::Table, global = true)]
-    output: OutputFormat,
+    #[arg(long, value_enum, global = true)]
+    output: Option<OutputFormat>,
 
     /// Emit compact JSON without whitespace.
     #[arg(long, global = true)]
@@ -31,6 +32,10 @@ struct Cli {
     /// Suppress non-essential human output.
     #[arg(short, long, global = true)]
     quiet: bool,
+
+    /// Apply a named non-secret config profile.
+    #[arg(long, global = true)]
+    profile: Option<String>,
 
     /// Use an API key for this invocation only. The key is not stored.
     #[arg(long, global = true, value_name = "KEY")]
@@ -77,6 +82,8 @@ enum Command {
     Sync(commands::sync::SyncCommand),
     /// Inspect or clear the local non-secret cache.
     Cache(commands::cache::CacheCommand),
+    /// Manage non-secret CLI defaults and profiles.
+    Config(commands::config::ConfigCommand),
     /// Print agent-focused usage guidance.
     Agent,
     /// Generate shell completion scripts.
@@ -91,7 +98,36 @@ enum Command {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    let output = OutputOptions::new(cli.output, cli.compact, cli.fields, cli.quiet);
+    let effective_config =
+        match config::load().and_then(|config| config.effective_profile(cli.profile.as_deref())) {
+            Ok(config) => config,
+            Err(err) => {
+                eprintln!("error: {err}");
+                std::process::exit(err.code().into());
+            }
+        };
+    let configured_output = match effective_config.output_format() {
+        Ok(format) => format,
+        Err(err) => {
+            eprintln!("error: {err}");
+            std::process::exit(err.code().into());
+        }
+    };
+    let output_format = cli
+        .output
+        .or(configured_output)
+        .unwrap_or(OutputFormat::Table);
+    let compact = if arg_present("--compact") {
+        cli.compact
+    } else {
+        effective_config.compact.unwrap_or(cli.compact)
+    };
+    let quiet = if arg_present("--quiet") || arg_present("-q") {
+        cli.quiet
+    } else {
+        effective_config.quiet.unwrap_or(cli.quiet)
+    };
+    let output = OutputOptions::new(output_format, compact, cli.fields, quiet);
 
     if let Err(err) = run(cli.command, cli.api_key, &output).await {
         if output.is_json() {
@@ -133,6 +169,7 @@ async fn run(
         }
         Command::Sync(command) => commands::sync::handle(command, api_key_override, output).await,
         Command::Cache(command) => commands::cache::handle(command, output),
+        Command::Config(command) => commands::config::handle(command, output),
         Command::Agent => commands::agent(output),
         Command::Completions { shell } => {
             let mut command = Cli::command();
@@ -142,4 +179,8 @@ async fn run(
         }
         Command::Doctor => commands::doctor(api_key_override, output),
     }
+}
+
+fn arg_present(flag: &str) -> bool {
+    std::env::args_os().any(|arg| arg == flag)
 }

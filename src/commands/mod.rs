@@ -1,6 +1,7 @@
 pub mod api;
 pub mod auth;
 pub mod cache;
+pub mod config;
 pub mod export;
 pub mod folders;
 pub mod notes;

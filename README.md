@@ -39,6 +39,11 @@ granola notes list --output json --compact --fields notes.id,notes.title,notes.o
 # Print the machine-readable integration contract for coding agents.
 granola agent --output json --compact
 
+# Optional non-secret defaults and profiles.
+granola config set profile.agent.output json
+granola config set profile.agent.compact true
+granola --profile agent notes list --since 7d
+
 # Export one note to Markdown.
 granola export note not_1d3tmYTlCICgjy --format markdown --include-transcript -o note.md
 
@@ -99,6 +104,9 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola recent|today|yesterday|last|search|show|open`
 - `granola export note NOTE_ID [--format markdown|json|txt|transcript] [--include-transcript] [-o FILE] [--force|--skip-existing]`
 - `granola export notes [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--format jsonl|markdown|json] [-o FILE | --output-dir DIR] [--include-transcript] [--force|--skip-existing]`
+- `granola sync [--since 30d] [--all] [--include-transcripts] [--replace]`
+- `granola cache status|clear`
+- `granola config show|path|set KEY VALUE`
 - `granola completions zsh|bash|fish|powershell|elvish`
 - `granola doctor`
 - `granola agent`
@@ -110,6 +118,7 @@ Global scriptability flags:
 - `--fields a,b,c`
 - `--quiet`
 - `--api-key KEY` for process-local auth override only
+- `--profile NAME` to apply non-secret defaults from config
 
 ## Contributing
 
@@ -151,6 +160,7 @@ nix run .#publish-pages
 - [JSON output](docs/json.md)
 - [Exporting notes](docs/export.md)
 - [Local cache and search](docs/cache.md)
+- [Non-secret config and profiles](docs/config.md)
 - [Hosted Downloads](docs/downloads.md)
 - [Shell completions](docs/shell-completions.md)
 - [Troubleshooting](docs/troubleshooting.md)

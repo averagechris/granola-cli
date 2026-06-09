@@ -7,6 +7,7 @@ Global flags available on every command:
 - `--fields a,b,c`
 - `--quiet`
 - `--api-key KEY` for one process only
+- `--profile NAME`
 
 ## Auth
 
@@ -97,6 +98,10 @@ granola export notes \
 granola sync [--since 30d] [--all] [--include-transcripts] [--replace]
 granola cache status
 granola cache clear
+granola config show
+granola config path
+granola config set output json
+granola config set profile.agent.compact true
 granola doctor
 granola agent
 granola completions zsh|bash|fish|powershell|elvish
