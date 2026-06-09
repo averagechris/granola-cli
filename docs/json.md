@@ -35,6 +35,15 @@ Paginated JSON commands return an envelope so scripts and agents can continue fr
 
 `folders list` uses the same shape with a `folders` array.
 
+## Batch hydration
+
+Use `notes hydrate` when an agent needs full note records for several IDs or a filtered list without shell loops:
+
+```bash
+granola notes hydrate not_A not_B --include-transcript --output json --compact
+granola notes hydrate --since 7d --include-transcript --jsonl
+```
+
 ## Error shape
 
 When `--output json` is requested, errors are emitted to stderr as JSON:

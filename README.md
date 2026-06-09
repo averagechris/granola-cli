@@ -20,6 +20,9 @@ granola notes list --since 7d --sort updated-at --order desc
 # Get a note, including transcript, as compact JSON.
 granola notes get not_1d3tmYTlCICgjy --include transcript --output json --compact
 
+# Hydrate many notes into full note records for agents.
+granola notes hydrate --since 7d --include-transcript --jsonl
+
 # Open a note in the browser, or print its URL for scripts.
 granola notes open not_1d3tmYTlCICgjy
 granola notes open not_1d3tmYTlCICgjy --print
@@ -83,6 +86,7 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola api get /v1/notes --query page_size=5`
 - `granola notes list [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--no-truncate]`
 - `granola notes get NOTE_ID [--include transcript]`
+- `granola notes hydrate [NOTE_ID ... | --ids-file FILE | --stdin | list filters] [--include-transcript] [--jsonl]`
 - `granola notes open NOTE_ID [--print]`
 - `granola folders list [--cursor CURSOR] [--page-size N] [--all] [--limit N]`
 - `granola export note NOTE_ID [--format markdown|json|txt|transcript] [--include-transcript] [-o FILE] [--force|--skip-existing]`

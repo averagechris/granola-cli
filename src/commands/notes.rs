@@ -5,6 +5,9 @@ use crate::types::{Note, NoteSummary};
 use chrono::{Duration, SecondsFormat, Utc};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json::json;
+use std::fs;
+use std::io::{self, Read};
+use std::path::PathBuf;
 
 #[derive(Debug, Args)]
 pub struct NotesCommand {
@@ -18,6 +21,8 @@ enum NotesSubcommand {
     List(ListNotesCommand),
     /// Retrieve one note by ID.
     Get(GetNoteCommand),
+    /// Fetch full note records for IDs or list filters.
+    Hydrate(HydrateNotesCommand),
     /// Open a note in the browser.
     Open(OpenNoteCommand),
 }
@@ -88,6 +93,54 @@ struct GetNoteCommand {
 }
 
 #[derive(Debug, Args)]
+struct HydrateNotesCommand {
+    /// Note IDs to fetch. If omitted, list filters select notes to hydrate.
+    note_ids: Vec<String>,
+    /// Read one note ID per line from this file.
+    #[arg(long)]
+    ids_file: Option<PathBuf>,
+    /// Read one note ID per line from stdin.
+    #[arg(long)]
+    stdin: bool,
+    /// Include transcripts in hydrated notes.
+    #[arg(long)]
+    include_transcript: bool,
+    /// Emit newline-delimited JSON, one note per line.
+    #[arg(long)]
+    jsonl: bool,
+    /// Return notes created before this date or date-time when selecting by filters.
+    #[arg(long)]
+    created_before: Option<String>,
+    /// Return notes created after this date or date-time when selecting by filters.
+    #[arg(long, conflicts_with = "since")]
+    created_after: Option<String>,
+    /// Return notes created within a relative duration, e.g. 7d, 24h, 30m.
+    #[arg(long, conflicts_with = "created_after")]
+    since: Option<String>,
+    /// Return notes updated after this date or date-time when selecting by filters.
+    #[arg(long, conflicts_with = "updated_since")]
+    updated_after: Option<String>,
+    /// Return notes updated within a relative duration, e.g. 7d, 24h, 30m.
+    #[arg(long, conflicts_with = "updated_after")]
+    updated_since: Option<String>,
+    /// Return notes in this folder and child folders when selecting by filters.
+    #[arg(long)]
+    folder_id: Option<String>,
+    /// Cursor to continue from when selecting by filters.
+    #[arg(long)]
+    cursor: Option<String>,
+    /// Page size, capped by the Granola API at 30.
+    #[arg(long, default_value_t = 10)]
+    page_size: u8,
+    /// Fetch all pages when selecting by filters.
+    #[arg(long)]
+    all: bool,
+    /// Maximum number of notes to hydrate.
+    #[arg(long)]
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Args)]
 struct OpenNoteCommand {
     /// Granola note ID, e.g. not_1d3tmYTlCICgjy.
     note_id: String,
@@ -107,6 +160,7 @@ pub async fn handle(
     match command.command {
         NotesSubcommand::List(command) => list_notes(&client, command, output).await,
         NotesSubcommand::Get(command) => get_note(&client, command, output).await,
+        NotesSubcommand::Hydrate(command) => hydrate_notes(&client, command, output).await,
         NotesSubcommand::Open(command) => open_note(&client, command, output).await,
     }
 }
@@ -178,6 +232,142 @@ async fn list_notes(
 
     print_note_table(&notes, command.no_truncate);
     Ok(())
+}
+
+async fn hydrate_notes(
+    client: &GranolaClient,
+    command: HydrateNotesCommand,
+    output: &OutputOptions,
+) -> Result<(), CliError> {
+    let ids = hydrate_note_ids(client, &command).await?;
+    let mut notes = Vec::with_capacity(ids.len());
+
+    for id in ids {
+        notes.push(client.get_note(&id, command.include_transcript).await?);
+    }
+
+    if command.jsonl {
+        for note in &notes {
+            println!("{}", serde_json::to_string(note).map_err(CliError::from)?);
+        }
+        return Ok(());
+    }
+
+    if output.is_json() {
+        return print_json(&json!({ "notes": notes, "count": notes.len() }), output);
+    }
+
+    print_hydrated_note_table(&notes);
+    Ok(())
+}
+
+async fn hydrate_note_ids(
+    client: &GranolaClient,
+    command: &HydrateNotesCommand,
+) -> Result<Vec<String>, CliError> {
+    let mut ids = command.note_ids.clone();
+
+    if let Some(path) = &command.ids_file {
+        let content = fs::read_to_string(path).map_err(|error| {
+            CliError::general(format!(
+                "failed to read IDs from {}: {error}",
+                path.display()
+            ))
+        })?;
+        ids.extend(parse_ids(&content));
+    }
+
+    if command.stdin {
+        let mut content = String::new();
+        io::stdin().read_to_string(&mut content).map_err(|error| {
+            CliError::general(format!("failed to read IDs from stdin: {error}"))
+        })?;
+        ids.extend(parse_ids(&content));
+    }
+
+    ids.sort();
+    ids.dedup();
+
+    if !ids.is_empty() {
+        if command_has_selection_filters(command) {
+            return Err(CliError::invalid_input(
+                "pass note IDs or list-selection filters, not both",
+            ));
+        }
+        if let Some(limit) = command.limit {
+            ids.truncate(limit);
+        }
+        return Ok(ids);
+    }
+
+    collect_hydrate_selection_ids(client, command).await
+}
+
+async fn collect_hydrate_selection_ids(
+    client: &GranolaClient,
+    command: &HydrateNotesCommand,
+) -> Result<Vec<String>, CliError> {
+    let page_size = validate_page_size(command.page_size)?;
+    let created_after = command
+        .since
+        .as_deref()
+        .map(relative_time_after)
+        .transpose()?
+        .or_else(|| command.created_after.clone());
+    let updated_after = command
+        .updated_since
+        .as_deref()
+        .map(relative_time_after)
+        .transpose()?
+        .or_else(|| command.updated_after.clone());
+    let mut params = ListNotesParams {
+        created_before: command.created_before.clone(),
+        created_after,
+        updated_after,
+        folder_id: command.folder_id.clone(),
+        cursor: command.cursor.clone(),
+        page_size: Some(page_size),
+    };
+    let mut ids = Vec::new();
+
+    loop {
+        let response = client.list_notes(&params).await?;
+        for note in response.notes {
+            if command.limit.is_some_and(|limit| ids.len() >= limit) {
+                break;
+            }
+            ids.push(note.id);
+        }
+
+        if command.limit.is_some_and(|limit| ids.len() >= limit)
+            || !command.all
+            || !response.has_more
+        {
+            break;
+        }
+        let Some(cursor) = response.cursor else { break };
+        params.cursor = Some(cursor);
+    }
+
+    Ok(ids)
+}
+
+fn parse_ids(content: &str) -> impl Iterator<Item = String> + '_ {
+    content.lines().filter_map(|line| {
+        let id = line.trim();
+        (!id.is_empty() && !id.starts_with('#')).then(|| id.to_string())
+    })
+}
+
+fn command_has_selection_filters(command: &HydrateNotesCommand) -> bool {
+    command.created_before.is_some()
+        || command.created_after.is_some()
+        || command.since.is_some()
+        || command.updated_after.is_some()
+        || command.updated_since.is_some()
+        || command.folder_id.is_some()
+        || command.cursor.is_some()
+        || command.all
 }
 
 async fn get_note(
@@ -261,6 +451,29 @@ fn print_note_table(notes: &[NoteSummary], no_truncate: bool) {
                 .collect(),
         );
     }
+}
+
+fn print_hydrated_note_table(notes: &[Note]) {
+    if notes.is_empty() {
+        println!("No notes found");
+        return;
+    }
+
+    print_rows(
+        &["id", "title", "owner", "created_at", "updated_at"],
+        notes
+            .iter()
+            .map(|note| {
+                vec![
+                    note.id.clone(),
+                    note.title.as_deref().unwrap_or("").to_string(),
+                    note.owner.email.clone(),
+                    note.created_at.clone(),
+                    note.updated_at.clone(),
+                ]
+            })
+            .collect(),
+    );
 }
 
 fn print_rows(headers: &[&str], rows: Vec<Vec<String>>) {

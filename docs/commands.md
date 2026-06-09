@@ -44,6 +44,8 @@ granola notes list \
   [--no-truncate]
 
 granola notes get NOTE_ID [--include transcript]
+granola notes hydrate [NOTE_ID ...] [--ids-file FILE] [--stdin] [--include-transcript] [--jsonl]
+granola notes hydrate [list filters] [--include-transcript] [--jsonl]
 granola notes open NOTE_ID [--print]
 ```
 
