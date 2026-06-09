@@ -89,10 +89,18 @@ enum Command {
     /// Generate shell completion scripts.
     Completions {
         /// Shell to generate completions for.
-        shell: Shell,
+        shell: Option<Shell>,
+        #[command(subcommand)]
+        command: Option<CompletionsSubcommand>,
     },
     /// Check local CLI configuration and credential availability.
     Doctor(commands::DoctorCommand),
+}
+
+#[derive(Debug, Subcommand)]
+enum CompletionsSubcommand {
+    /// Print shell-specific completion installation instructions.
+    Install { shell: Shell },
 }
 
 #[tokio::main]
@@ -171,16 +179,62 @@ async fn run(
         Command::Cache(command) => commands::cache::handle(command, output),
         Command::Config(command) => commands::config::handle(command, output),
         Command::Agent => commands::agent(output),
-        Command::Completions { shell } => {
-            let mut command = Cli::command();
-            let name = command.get_name().to_string();
-            clap_complete::generate(shell, &mut command, name, &mut io::stdout());
-            Ok(())
-        }
+        Command::Completions { shell, command } => handle_completions(shell, command),
         Command::Doctor(command) => commands::doctor(command, api_key_override, output).await,
     }
 }
 
 fn arg_present(flag: &str) -> bool {
     std::env::args_os().any(|arg| arg == flag)
+}
+
+fn handle_completions(
+    shell: Option<Shell>,
+    command: Option<CompletionsSubcommand>,
+) -> Result<(), CliError> {
+    match (shell, command) {
+        (Some(shell), None) => {
+            let mut command = Cli::command();
+            let name = command.get_name().to_string();
+            clap_complete::generate(shell, &mut command, name, &mut io::stdout());
+            Ok(())
+        }
+        (None, Some(CompletionsSubcommand::Install { shell })) => {
+            print_completion_install(shell);
+            Ok(())
+        }
+        _ => Err(CliError::invalid_input(
+            "use `granola completions SHELL` or `granola completions install SHELL`",
+        )),
+    }
+}
+
+fn print_completion_install(shell: Shell) {
+    match shell {
+        Shell::Zsh => {
+            println!("mkdir -p ~/.zfunc");
+            println!("granola completions zsh > ~/.zfunc/_granola");
+            println!("# Add to ~/.zshrc if needed: fpath=(~/.zfunc $fpath); autoload -Uz compinit; compinit");
+        }
+        Shell::Bash => {
+            println!("mkdir -p ~/.local/share/bash-completion/completions");
+            println!(
+                "granola completions bash > ~/.local/share/bash-completion/completions/granola"
+            );
+        }
+        Shell::Fish => {
+            println!("mkdir -p ~/.config/fish/completions");
+            println!("granola completions fish > ~/.config/fish/completions/granola.fish");
+        }
+        Shell::PowerShell => {
+            println!("granola completions powershell >> $PROFILE");
+        }
+        Shell::Elvish => {
+            println!("mkdir -p ~/.elvish/lib");
+            println!("granola completions elvish > ~/.elvish/lib/granola.elv");
+        }
+        _ => {
+            println!("granola completions {shell} > /path/to/your/completion/file");
+        }
+    }
 }

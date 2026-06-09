@@ -108,6 +108,7 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola cache status|clear`
 - `granola config show|path|set KEY VALUE`
 - `granola completions zsh|bash|fish|powershell|elvish`
+- `granola completions install zsh|bash|fish|powershell|elvish`
 - `granola doctor [--validate]`
 - `granola agent`
 

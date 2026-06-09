@@ -105,4 +105,5 @@ granola config set profile.agent.compact true
 granola doctor [--validate]
 granola agent
 granola completions zsh|bash|fish|powershell|elvish
+granola completions install zsh|bash|fish|powershell|elvish
 ```
