@@ -3,6 +3,7 @@ use crate::error::CliError;
 use crate::output::{print_json, OutputOptions};
 use crate::types::Folder;
 use clap::{Args, Subcommand};
+use serde_json::json;
 
 #[derive(Debug, Args)]
 pub struct FoldersCommand {
@@ -56,8 +57,9 @@ async fn list_folders(
     };
     let mut folders = Vec::new();
 
-    loop {
+    let (has_more, next_cursor) = loop {
         let response = client.list_folders(&params).await?;
+        let page_meta = (response.has_more, response.cursor.clone());
         for folder in response.folders {
             if command.limit.is_some_and(|limit| folders.len() >= limit) {
                 break;
@@ -66,17 +68,28 @@ async fn list_folders(
         }
 
         if command.limit.is_some_and(|limit| folders.len() >= limit) {
-            break;
+            break page_meta;
         }
         if !command.all || !response.has_more {
-            break;
+            break page_meta;
         }
-        let Some(cursor) = response.cursor else { break };
+        let Some(cursor) = response.cursor else {
+            break page_meta;
+        };
         params.cursor = Some(cursor);
-    }
+    };
 
     if output.is_json() {
-        return print_json(&folders, output);
+        return print_json(
+            &json!({
+                "folders": folders,
+                "count": folders.len(),
+                "has_more": has_more,
+                "cursor": next_cursor,
+                "page_size": page_size,
+            }),
+            output,
+        );
     }
 
     print_folder_table(&folders);

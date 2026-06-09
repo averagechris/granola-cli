@@ -19,6 +19,22 @@ granola notes list --output json --fields id,title,owner.email
 
 For arrays, field selection is applied to each item.
 
+## Paginated list shape
+
+Paginated JSON commands return an envelope so scripts and agents can continue from the next cursor without parsing table output:
+
+```json
+{
+  "notes": [],
+  "count": 0,
+  "has_more": false,
+  "cursor": null,
+  "page_size": 10
+}
+```
+
+`folders list` uses the same shape with a `folders` array.
+
 ## Error shape
 
 When `--output json` is requested, errors are emitted to stderr as JSON:

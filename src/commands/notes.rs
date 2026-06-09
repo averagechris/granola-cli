@@ -139,8 +139,9 @@ async fn list_notes(
     };
     let mut notes = Vec::new();
 
-    loop {
+    let (has_more, next_cursor) = loop {
         let response = client.list_notes(&params).await?;
+        let page_meta = (response.has_more, response.cursor.clone());
         for note in response.notes {
             if command.limit.is_some_and(|limit| notes.len() >= limit) {
                 break;
@@ -149,19 +150,30 @@ async fn list_notes(
         }
 
         if command.limit.is_some_and(|limit| notes.len() >= limit) {
-            break;
+            break page_meta;
         }
         if !command.all || !response.has_more {
-            break;
+            break page_meta;
         }
-        let Some(cursor) = response.cursor else { break };
+        let Some(cursor) = response.cursor else {
+            break page_meta;
+        };
         params.cursor = Some(cursor);
-    }
+    };
 
     sort_notes(&mut notes, command.sort, command.order);
 
     if output.is_json() {
-        return print_json(&notes, output);
+        return print_json(
+            &json!({
+                "notes": notes,
+                "count": notes.len(),
+                "has_more": has_more,
+                "cursor": next_cursor,
+                "page_size": page_size,
+            }),
+            output,
+        );
     }
 
     print_note_table(&notes, command.no_truncate);
