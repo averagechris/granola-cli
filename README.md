@@ -74,17 +74,17 @@ https://averagechris.srht.site/granola-cli/
 Current macOS arm64 artifact path after publishing:
 
 ```text
-https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.1.0-aarch64-darwin.tar.gz
+https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.2.0-aarch64-darwin.tar.gz
 ```
 
 Manual install example:
 
 ```bash
-curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.1.0-aarch64-darwin.tar.gz
-curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.1.0-aarch64-darwin.tar.gz.sha256
-sha256sum -c granola-cli-v0.1.0-aarch64-darwin.tar.gz.sha256
-tar -xzf granola-cli-v0.1.0-aarch64-darwin.tar.gz
-install -m 0755 granola-cli-v0.1.0-aarch64-darwin/granola ~/.local/bin/granola
+curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.2.0-aarch64-darwin.tar.gz
+curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.2.0-aarch64-darwin.tar.gz.sha256
+sha256sum -c granola-cli-v0.2.0-aarch64-darwin.tar.gz.sha256
+tar -xzf granola-cli-v0.2.0-aarch64-darwin.tar.gz
+install -m 0755 granola-cli-v0.2.0-aarch64-darwin/granola ~/.local/bin/granola
 ```
 
 See [Hosted Downloads](docs/downloads.md).
@@ -153,6 +153,7 @@ nix run .#publish-pages
 ## Planning docs
 
 - [Requirements](docs/requirements.md)
+- [Changelog](CHANGELOG.md)
 - [Decisions](docs/decisions.md)
 - [Implementation plan](docs/plan.md)
 - [Granola API notes](docs/api-notes.md)
