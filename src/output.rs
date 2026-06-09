@@ -89,33 +89,74 @@ fn select_object(value: &Value, fields: &[String]) -> Value {
         if path.is_empty() {
             continue;
         }
-        if let Some(selected) = get_path(value, &path) {
-            insert_path(&mut out, &path, selected.clone());
-        }
+        insert_selected(&mut out, value, &path);
     }
 
     Value::Object(out)
 }
 
-fn get_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
-    let mut current = value;
-    for part in path {
-        current = current.get(*part)?;
-    }
-    Some(current)
-}
+fn insert_selected(out: &mut Map<String, Value>, source: &Value, path: &[&str]) {
+    let Some((head, tail)) = path.split_first() else {
+        return;
+    };
+    let Some(value) = source.get(*head) else {
+        return;
+    };
 
-fn insert_path(out: &mut Map<String, Value>, path: &[&str], value: Value) {
-    if path.len() == 1 {
-        out.insert(path[0].to_string(), value);
+    if tail.is_empty() {
+        out.insert((*head).to_string(), value.clone());
         return;
     }
 
-    let entry = out
-        .entry(path[0].to_string())
-        .or_insert_with(|| Value::Object(Map::new()));
-    if let Value::Object(map) = entry {
-        insert_path(map, &path[1..], value);
+    match value {
+        Value::Object(_) => {
+            let entry = out
+                .entry((*head).to_string())
+                .or_insert_with(|| Value::Object(Map::new()));
+            if let Value::Object(map) = entry {
+                insert_selected(map, value, tail);
+            }
+        }
+        Value::Array(items) => {
+            let projected_items: Vec<Value> = items
+                .iter()
+                .map(|item| {
+                    let mut projected = Map::new();
+                    insert_selected(&mut projected, item, tail);
+                    Value::Object(projected)
+                })
+                .collect();
+
+            match out.get_mut(*head) {
+                Some(Value::Array(existing)) => merge_projected_arrays(existing, projected_items),
+                _ => {
+                    out.insert((*head).to_string(), Value::Array(projected_items));
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn merge_projected_arrays(existing: &mut [Value], projected_items: Vec<Value>) {
+    for (existing_item, projected_item) in existing.iter_mut().zip(projected_items) {
+        let (Value::Object(existing_map), Value::Object(projected_map)) =
+            (existing_item, projected_item)
+        else {
+            continue;
+        };
+        merge_maps(existing_map, projected_map);
+    }
+}
+
+fn merge_maps(into: &mut Map<String, Value>, from: Map<String, Value>) {
+    for (key, value) in from {
+        match (into.get_mut(&key), value) {
+            (Some(Value::Object(existing)), Value::Object(new)) => merge_maps(existing, new),
+            (_, value) => {
+                into.insert(key, value);
+            }
+        }
     }
 }
 
@@ -132,6 +173,34 @@ mod tests {
         assert_eq!(
             selected,
             json!([{ "id": "not_123", "owner": { "email": "a@example.com" } }])
+        );
+    }
+
+    #[test]
+    fn selects_nested_fields_for_arrays_inside_envelopes() {
+        let value = json!({
+            "notes": [
+                { "id": "not_123", "owner": { "email": "a@example.com" }, "title": "A" }
+            ],
+            "count": 1,
+            "cursor": "next"
+        });
+
+        let selected = select_fields(
+            &value,
+            &[
+                "notes.id".to_string(),
+                "notes.owner.email".to_string(),
+                "count".to_string(),
+            ],
+        );
+
+        assert_eq!(
+            selected,
+            json!({
+                "notes": [{ "id": "not_123", "owner": { "email": "a@example.com" } }],
+                "count": 1
+            })
         );
     }
 }

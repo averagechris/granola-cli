@@ -44,6 +44,14 @@ granola notes hydrate not_A not_B --include-transcript --output json --compact
 granola notes hydrate --since 7d --include-transcript --jsonl
 ```
 
+## Agent manifest
+
+Agents can discover the stable command, output, error, and constraint contract with:
+
+```bash
+granola agent --output json --compact
+```
+
 ## Error shape
 
 When `--output json` is requested, errors are emitted to stderr as JSON:

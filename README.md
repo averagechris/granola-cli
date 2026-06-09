@@ -31,7 +31,10 @@ granola notes open not_1d3tmYTlCICgjy --print
 granola folders list
 
 # Agent-friendly JSON with field projection.
-granola notes list --output json --compact --fields id,title,owner.email
+granola notes list --output json --compact --fields notes.id,notes.title,notes.owner.email,count,has_more,cursor
+
+# Print the machine-readable integration contract for coding agents.
+granola agent --output json --compact
 
 # Export one note to Markdown.
 granola export note not_1d3tmYTlCICgjy --format markdown --include-transcript -o note.md
