@@ -137,7 +137,9 @@ pub async fn doctor(
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let keyring_available = crate::keyring::is_available();
-    let keyring_configured = crate::keyring::get_key()?.is_some();
+    let keyring_result = crate::keyring::get_key();
+    let keyring_configured = keyring_result.as_ref().is_ok_and(|key| key.is_some());
+    let keyring_error = keyring_result.as_ref().err().map(|err| err.message.clone());
     let api_key_override_present = api_key_override.is_some();
     let resolved_api_key = resolve_api_key(api_key_override);
     let auth_resolves = resolved_api_key.is_ok();
@@ -181,6 +183,9 @@ pub async fn doctor(
         next_steps
             .push("Run `granola auth login --validate` or pass `--api-key` for one invocation");
     }
+    if keyring_error.is_some() && !api_key_override_present {
+        next_steps.push("Check OS keyring permissions or pass `--api-key` for this invocation");
+    }
     if auth_valid == Some(false) {
         next_steps.push(
             "Confirm the API key is active and that your Granola workspace supports API keys",
@@ -194,6 +199,7 @@ pub async fn doctor(
         "version": env!("CARGO_PKG_VERSION"),
         "keyring_available": keyring_available,
         "keyring_configured": keyring_configured,
+        "keyring_error": keyring_error,
         "api_key_override_present": api_key_override_present,
         "auth_resolves": auth_resolves,
         "validated": command.validate,
@@ -211,6 +217,9 @@ pub async fn doctor(
 
     println!("keyring available: {keyring_available}");
     println!("keyring configured: {keyring_configured}");
+    if let Some(error) = keyring_error {
+        println!("keyring error: {error}");
+    }
     println!("api key override present: {api_key_override_present}");
     println!("auth resolves: {auth_resolves}");
     println!("config path: {}", config_path.display());
