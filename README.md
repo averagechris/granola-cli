@@ -102,8 +102,8 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola folders list [--cursor CURSOR] [--page-size N] [--all] [--limit N]`
 - `granola folders tree`
 - `granola recent|today|yesterday|last|search|show|open`
-- `granola export note NOTE_ID [--format markdown|json|txt|transcript] [--include-transcript] [-o FILE] [--force|--skip-existing]`
-- `granola export notes [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--format jsonl|markdown|json] [-o FILE | --output-dir DIR] [--include-transcript] [--force|--skip-existing]`
+- `granola export note NOTE_ID [--format markdown|json|txt|transcript] [--include-transcript] [--frontmatter] [-o FILE] [--force|--skip-existing]`
+- `granola export notes [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--format jsonl|markdown|json] [-o FILE | --output-dir DIR] [--include-transcript] [--frontmatter] [--only-changed] [--force|--skip-existing]`
 - `granola sync [--since 30d] [--all] [--include-transcripts] [--replace]`
 - `granola cache status|clear`
 - `granola config show|path|set KEY VALUE`

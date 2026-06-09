@@ -76,6 +76,7 @@ granola open NOTE_ID
 granola export note NOTE_ID \
   [--format markdown|json|txt|transcript] \
   [--include-transcript] \
+  [--frontmatter] \
   [-o FILE] \
   [--force|--skip-existing]
 
@@ -89,6 +90,8 @@ granola export notes \
   [--order asc|desc] \
   [-o FILE | --output-dir DIR] \
   [--include-transcript] \
+  [--frontmatter] \
+  [--only-changed] \
   [--force|--skip-existing]
 ```
 
