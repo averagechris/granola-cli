@@ -19,8 +19,8 @@ nix run .#package-macos
 This creates:
 
 ```text
-dist/downloads/granola-cli-v0.2.0-aarch64-darwin.tar.gz
-dist/downloads/granola-cli-v0.2.0-aarch64-darwin.tar.gz.sha256
+dist/downloads/granola-cli-v0.2.1-aarch64-darwin.tar.gz
+dist/downloads/granola-cli-v0.2.1-aarch64-darwin.tar.gz.sha256
 ```
 
 The tarball contains:
@@ -77,15 +77,15 @@ https://averagechris.srht.site/granola-cli/
 Expected macOS artifact URL:
 
 ```text
-https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.2.0-aarch64-darwin.tar.gz
+https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.2.1-aarch64-darwin.tar.gz
 ```
 
 ## Manual install from hosted artifact
 
 ```bash
-curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.2.0-aarch64-darwin.tar.gz
-curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.2.0-aarch64-darwin.tar.gz.sha256
-sha256sum -c granola-cli-v0.2.0-aarch64-darwin.tar.gz.sha256
-tar -xzf granola-cli-v0.2.0-aarch64-darwin.tar.gz
-install -m 0755 granola-cli-v0.2.0-aarch64-darwin/granola ~/.local/bin/granola
+curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.2.1-aarch64-darwin.tar.gz
+curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.2.1-aarch64-darwin.tar.gz.sha256
+sha256sum -c granola-cli-v0.2.1-aarch64-darwin.tar.gz.sha256
+tar -xzf granola-cli-v0.2.1-aarch64-darwin.tar.gz
+install -m 0755 granola-cli-v0.2.1-aarch64-darwin/granola ~/.local/bin/granola
 ```

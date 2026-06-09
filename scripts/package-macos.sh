@@ -55,7 +55,10 @@ tar \
   -czf "${download_dir}/${artifact}" \
   "$(basename "${stage_dir}")"
 
-sha256sum "${download_dir}/${artifact}" > "${download_dir}/${artifact}.sha256"
+(
+  cd "${download_dir}"
+  sha256sum "${artifact}" > "${artifact}.sha256"
+)
 
 cat > "${download_dir}/manifest.json" <<EOF
 {

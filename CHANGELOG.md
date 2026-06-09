@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.1 - 2026-06-09
+
+### Fixed
+
+- Hosted `.sha256` files now contain relative artifact filenames instead of build-machine absolute paths, so `sha256sum -c` works after download.
+
 ## v0.2.0 - 2026-06-09
 
 This release focuses on making `granola` seamless for humans, scripts, and coding agents.
