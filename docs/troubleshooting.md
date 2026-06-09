@@ -35,7 +35,7 @@ Only `/v1/...` paths are accepted.
 Run:
 
 ```bash
-granola doctor --output json
+granola doctor --validate --output json
 ```
 
 On Linux, Secret Service requires a working D-Bus/keyring daemon.

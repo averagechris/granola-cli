@@ -92,7 +92,7 @@ enum Command {
         shell: Shell,
     },
     /// Check local CLI configuration and credential availability.
-    Doctor,
+    Doctor(commands::DoctorCommand),
 }
 
 #[tokio::main]
@@ -177,7 +177,7 @@ async fn run(
             clap_complete::generate(shell, &mut command, name, &mut io::stdout());
             Ok(())
         }
-        Command::Doctor => commands::doctor(api_key_override, output),
+        Command::Doctor(command) => commands::doctor(command, api_key_override, output).await,
     }
 }
 

@@ -102,7 +102,7 @@ granola config show
 granola config path
 granola config set output json
 granola config set profile.agent.compact true
-granola doctor
+granola doctor [--validate]
 granola agent
 granola completions zsh|bash|fish|powershell|elvish
 ```
