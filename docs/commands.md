@@ -117,6 +117,7 @@ granola views list
 granola views show NAME
 granola views run NAME
 granola views delete NAME
+granola digest [--since 7d] [--folder-id FOL_ID] [--all] [--limit N]
 granola config show
 granola config path
 granola config set output json

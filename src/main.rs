@@ -93,6 +93,8 @@ enum Command {
     Open { note_id: String },
     /// Export notes and transcripts.
     Export(commands::export::ExportCommand),
+    /// Summarize recent note metadata for review.
+    Digest(commands::digest::DigestCommand),
     /// Sync notes into the local non-secret cache.
     Sync(commands::sync::SyncCommand),
     /// Inspect or clear the local non-secret cache.
@@ -199,6 +201,9 @@ async fn run(
         }
         Command::Export(command) => {
             commands::export::handle(command, api_key_override, output).await
+        }
+        Command::Digest(command) => {
+            commands::digest::handle(command, api_key_override, output).await
         }
         Command::Sync(command) => commands::sync::handle(command, api_key_override, output).await,
         Command::Cache(command) => commands::cache::handle(command, output),

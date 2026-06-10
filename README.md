@@ -42,6 +42,9 @@ granola views create customer-calls --folder-id fol_123 --since 30d --all
 granola views create renewal-search --query 'transcript:renewal' --limit 20
 granola views run customer-calls
 
+# Generate a lightweight recent-meetings digest.
+granola digest --since 7d --all
+
 # Print the machine-readable integration contract for coding agents.
 granola agent --output json-compact
 
@@ -113,6 +116,7 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola sync [--since 30d] [--all] [--include-transcripts] [--replace]`
 - `granola cache status|clear`
 - `granola views create|list|show|delete|run`
+- `granola digest [--since 7d] [--folder-id FOL_ID] [--all] [--limit N]`
 - `granola config show|path|set KEY VALUE`
 - `granola completions zsh|bash|fish|powershell|elvish`
 - `granola completions install zsh|bash|fish|powershell|elvish`
