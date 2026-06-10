@@ -460,3 +460,79 @@ fn relative_duration_error(input: &str) -> CliError {
         "invalid relative duration '{input}'; use a positive value ending in d, h, or m (for example 7d, 24h, 30m)"
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::User;
+
+    #[test]
+    fn validates_saved_view_names() {
+        assert!(validate_name("customer-calls_1.prod").is_ok());
+        assert!(validate_name("").is_err());
+        assert!(validate_name("bad/name").is_err());
+    }
+
+    #[test]
+    fn selectors_require_query_or_list_filter() {
+        assert!(!has_selector(&create_command(None, None)));
+        assert!(has_selector(&create_command(Some("mint"), None)));
+        assert!(has_selector(&create_command(None, Some("7d"))));
+    }
+
+    #[test]
+    fn formats_saved_view_selector() {
+        let view = SavedView {
+            query: Some("transcript:renewal".to_string()),
+            since: Some("30d".to_string()),
+            folder_id: Some("fol_123".to_string()),
+            ..Default::default()
+        };
+
+        let selector = view_selector(&view);
+
+        assert!(selector.contains("query=transcript:renewal"));
+        assert!(selector.contains("since=30d"));
+        assert!(selector.contains("folder_id=fol_123"));
+    }
+
+    #[test]
+    fn sorts_notes_by_saved_view_settings() {
+        let mut notes = vec![summary("not_b", "Beta"), summary("not_a", "Alpha")];
+
+        sort_notes(&mut notes, Some("title"), Some("asc"));
+
+        assert_eq!(notes[0].id, "not_a");
+    }
+
+    fn create_command(query: Option<&str>, since: Option<&str>) -> CreateViewCommand {
+        CreateViewCommand {
+            name: "view".to_string(),
+            query: query.map(str::to_string),
+            created_before: None,
+            created_after: None,
+            since: since.map(str::to_string),
+            updated_after: None,
+            updated_since: None,
+            folder_id: None,
+            sort: None,
+            order: None,
+            limit: None,
+            all: false,
+        }
+    }
+
+    fn summary(id: &str, title: &str) -> NoteSummary {
+        NoteSummary {
+            id: id.to_string(),
+            object: "note".to_string(),
+            title: Some(title.to_string()),
+            owner: User {
+                name: None,
+                email: "owner@example.com".to_string(),
+            },
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        }
+    }
+}

@@ -35,6 +35,18 @@ pub fn legacy_cache_path(home: &std::path::Path) -> std::path::PathBuf {
     sqlite_cache_path(home).with_file_name("notes.json")
 }
 
+pub fn config_path(home: &std::path::Path) -> std::path::PathBuf {
+    #[cfg(target_os = "macos")]
+    return home
+        .join("Library")
+        .join("Application Support")
+        .join("granola-cli")
+        .join("config.toml");
+
+    #[cfg(not(target_os = "macos"))]
+    return home.join(".config").join("granola-cli").join("config.toml");
+}
+
 pub fn create_empty_cache(home: &std::path::Path) {
     let conn = Connection::open(sqlite_cache_path(home)).unwrap();
     init_schema(&conn);

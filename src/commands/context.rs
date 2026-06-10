@@ -338,3 +338,39 @@ fn relative_duration_error(input: &str) -> CliError {
         "invalid relative duration '{input}'; use a positive value ending in d, h, or m (for example 7d, 24h, 30m)"
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn renders_markdown_bundle_with_transcript() {
+        let note: Note = serde_json::from_str(include_str!(
+            "../../tests/fixtures/get_note_with_transcript.json"
+        ))
+        .unwrap();
+
+        let markdown = render_context_markdown(&[note], true);
+
+        assert!(markdown.contains("# Granola context bundle"));
+        assert!(markdown.contains("## Untitled note"));
+        assert!(markdown.contains("### Transcript"));
+        assert!(markdown.contains("Speaker A"));
+    }
+
+    #[test]
+    fn truncates_on_utf8_boundary_with_marker() {
+        let truncated = truncate_utf8("abc😀def", 5);
+
+        assert!(truncated.starts_with("abc"));
+        assert!(truncated.contains("granola context truncated"));
+    }
+
+    #[test]
+    fn normalizes_ids_and_urls_from_lines() {
+        let ids = normalize_lines("# comment\nnot_abc\nhttps://app.granola.ai/notes/not_def\n\n")
+            .unwrap();
+
+        assert_eq!(ids, vec!["not_abc", "not_def"]);
+    }
+}

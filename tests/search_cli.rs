@@ -4,7 +4,7 @@ use predicates::prelude::*;
 use std::fs;
 use std::process::Stdio;
 use support::{
-    create_empty_cache, granola, legacy_cache_path, seed_cache, sqlite_cache_path,
+    config_path, create_empty_cache, granola, legacy_cache_path, seed_cache, sqlite_cache_path,
     temp_home_with_cache,
 };
 
@@ -247,4 +247,92 @@ fn cache_status_reports_sqlite_counts_and_clear_removes_caches() {
 
     assert!(!sqlite_cache_path(home.path()).exists());
     assert!(!legacy_path.exists());
+}
+
+#[test]
+fn cache_maintenance_commands_report_and_export_cache() {
+    let home = temp_home_with_cache();
+    seed_cache(home.path());
+    let export_path = home.path().join("cache.jsonl");
+
+    granola(home.path())
+        .args(["cache", "path"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("notes.sqlite"));
+
+    granola(home.path())
+        .args(["cache", "verify", "--output", "json-compact"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"ok\":true"));
+
+    granola(home.path())
+        .args(["cache", "vacuum"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("vacuumed cache"));
+
+    granola(home.path())
+        .args([
+            "cache",
+            "export",
+            "--format",
+            "jsonl",
+            "-o",
+            export_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    let exported = fs::read_to_string(export_path).unwrap();
+    assert!(exported.contains("not_async"));
+    assert!(exported.contains("cached_transcript"));
+}
+
+#[test]
+fn saved_search_views_round_trip_through_config_and_cache() {
+    let home = temp_home_with_cache();
+    seed_cache(home.path());
+
+    granola(home.path())
+        .args([
+            "views",
+            "create",
+            "mint-view",
+            "--query",
+            "mint",
+            "--limit",
+            "1",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("saved view 'mint-view'"));
+
+    assert!(config_path(home.path()).exists());
+
+    granola(home.path())
+        .args(["views", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("mint-view"))
+        .stdout(predicate::str::contains("search"));
+
+    granola(home.path())
+        .args(["views", "show", "mint-view"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("selector: query=mint"));
+
+    granola(home.path())
+        .args(["views", "run", "mint-view", "--output", "json-compact"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"count\":1"));
+
+    granola(home.path())
+        .args(["views", "delete", "mint-view"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("deleted view 'mint-view'"));
 }

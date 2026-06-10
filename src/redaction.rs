@@ -127,4 +127,33 @@ mod tests {
         assert!(!value.contains("555-123-4567"));
         assert!(!value.contains("grn_testsecret12345"));
     }
+
+    #[test]
+    fn redacts_note_metadata_summary_and_transcript() {
+        let mut note: Note = serde_json::from_str(include_str!(
+            "../tests/fixtures/get_note_with_transcript.json"
+        ))
+        .unwrap();
+        note.owner.email = "owner@example.com".to_string();
+        note.summary_text = "Call test@example.com at 555-123-4567".to_string();
+        note.transcript.as_mut().unwrap()[0].text = "secret grn_testsecret12345".to_string();
+
+        redact_note(
+            &mut note,
+            &[
+                RedactionKind::Emails,
+                RedactionKind::Phones,
+                RedactionKind::Secrets,
+                RedactionKind::Attendees,
+            ],
+        );
+
+        assert_eq!(note.owner.email, "[redacted email]");
+        assert!(note.attendees.is_empty());
+        assert!(note.summary_text.contains("[redacted email]"));
+        assert!(note.summary_text.contains("[redacted phone]"));
+        assert!(note.transcript.unwrap()[0]
+            .text
+            .contains("[redacted secret]"));
+    }
 }

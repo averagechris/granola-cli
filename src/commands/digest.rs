@@ -245,3 +245,45 @@ fn relative_duration_error(input: &str) -> CliError {
         "invalid relative duration '{input}'; use a positive value ending in d, h, or m (for example 7d, 24h, 30m)"
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::User;
+
+    #[test]
+    fn build_digest_groups_by_day_and_sorts_owner_counts() {
+        let digest = build_digest(
+            vec![
+                summary("not_a", "Alpha", "a@example.com", "2026-01-01T01:00:00Z"),
+                summary("not_b", "Beta", "b@example.com", "2026-01-02T01:00:00Z"),
+                summary("not_c", "Gamma", "a@example.com", "2026-01-02T02:00:00Z"),
+            ],
+            Some("2026-01-01T00:00:00Z".to_string()),
+            None,
+            None,
+            Some("fol_1".to_string()),
+        );
+
+        assert_eq!(digest.count, 3);
+        assert_eq!(digest.folder_id.as_deref(), Some("fol_1"));
+        assert_eq!(digest.by_day[0].day, "2026-01-02");
+        assert_eq!(digest.by_day[0].count, 2);
+        assert_eq!(digest.by_owner[0].owner, "a@example.com");
+        assert_eq!(digest.by_owner[0].count, 2);
+    }
+
+    fn summary(id: &str, title: &str, owner: &str, created_at: &str) -> NoteSummary {
+        NoteSummary {
+            id: id.to_string(),
+            object: "note".to_string(),
+            title: Some(title.to_string()),
+            owner: User {
+                name: None,
+                email: owner.to_string(),
+            },
+            created_at: created_at.to_string(),
+            updated_at: created_at.to_string(),
+        }
+    }
+}

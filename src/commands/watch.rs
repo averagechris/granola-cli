@@ -52,13 +52,7 @@ pub async fn handle(
     loop {
         poll_number += 1;
         let notes = poll_notes(&client, &command, page_size).await?;
-        let mut fresh = Vec::new();
-        for note in notes {
-            let key = format!("{}:{}", note.id, note.updated_at);
-            if seen.insert(key) && (command.include_existing || poll_number > 1) {
-                fresh.push(note);
-            }
-        }
+        let fresh = fresh_notes_for_poll(&mut seen, notes, command.include_existing, poll_number);
         emit_poll(poll_number, &fresh, output)?;
 
         if command.iterations.is_some_and(|limit| poll_number >= limit) {
@@ -67,6 +61,21 @@ pub async fn handle(
         sleep(TokioDuration::from_secs(command.interval_seconds)).await;
     }
     Ok(())
+}
+
+fn fresh_notes_for_poll(
+    seen: &mut HashSet<String>,
+    notes: Vec<NoteSummary>,
+    include_existing: bool,
+    poll_number: usize,
+) -> Vec<NoteSummary> {
+    notes
+        .into_iter()
+        .filter_map(|note| {
+            let key = format!("{}:{}", note.id, note.updated_at);
+            (seen.insert(key) && (include_existing || poll_number > 1)).then_some(note)
+        })
+        .collect()
 }
 
 async fn poll_notes(
@@ -151,4 +160,65 @@ fn relative_duration_error(input: &str) -> CliError {
     CliError::invalid_input(format!(
         "invalid relative duration '{input}'; use a positive value ending in d, h, or m (for example 7d, 24h, 30m)"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::User;
+
+    #[test]
+    fn first_poll_suppresses_existing_notes_by_default() {
+        let mut seen = HashSet::new();
+
+        let fresh = fresh_notes_for_poll(&mut seen, vec![summary("not_a", "2026-01-01")], false, 1);
+
+        assert!(fresh.is_empty());
+        assert_eq!(seen.len(), 1);
+    }
+
+    #[test]
+    fn later_poll_emits_new_and_updated_notes_once() {
+        let mut seen = HashSet::new();
+        let _ = fresh_notes_for_poll(&mut seen, vec![summary("not_a", "2026-01-01")], false, 1);
+
+        let fresh = fresh_notes_for_poll(
+            &mut seen,
+            vec![
+                summary("not_a", "2026-01-01"),
+                summary("not_a", "2026-01-02"),
+                summary("not_b", "2026-01-02"),
+            ],
+            false,
+            2,
+        );
+
+        assert_eq!(fresh.len(), 2);
+        assert_eq!(fresh[0].id, "not_a");
+        assert_eq!(fresh[0].updated_at, "2026-01-02");
+        assert_eq!(fresh[1].id, "not_b");
+    }
+
+    #[test]
+    fn include_existing_emits_first_poll() {
+        let mut seen = HashSet::new();
+
+        let fresh = fresh_notes_for_poll(&mut seen, vec![summary("not_a", "2026-01-01")], true, 1);
+
+        assert_eq!(fresh.len(), 1);
+    }
+
+    fn summary(id: &str, updated_at: &str) -> NoteSummary {
+        NoteSummary {
+            id: id.to_string(),
+            object: "note".to_string(),
+            title: Some(id.to_string()),
+            owner: User {
+                name: None,
+                email: "owner@example.com".to_string(),
+            },
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: updated_at.to_string(),
+        }
+    }
 }

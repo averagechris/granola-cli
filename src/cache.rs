@@ -237,6 +237,10 @@ pub fn export_jsonl() -> Result<Option<String>, CliError> {
         return Ok(None);
     }
     let conn = open_existing(&path)?;
+    export_jsonl_from_conn(&conn).map(Some)
+}
+
+fn export_jsonl_from_conn(conn: &Connection) -> Result<String, CliError> {
     let mut stmt = conn
         .prepare(
             "SELECT s.id, s.summary_json, n.note_json, n.includes_transcript \
@@ -275,7 +279,7 @@ pub fn export_jsonl() -> Result<Option<String>, CliError> {
         );
         output.push('\n');
     }
-    Ok(Some(output))
+    Ok(output)
 }
 
 pub fn search(query: &str, limit: Option<usize>) -> Result<Option<Vec<CacheSearchHit>>, CliError> {
@@ -979,5 +983,27 @@ mod tests {
         let hits = search_in_conn(&conn, "?", None).unwrap().unwrap();
 
         assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn exports_cache_rows_as_jsonl() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        let note: Note = serde_json::from_str(include_str!(
+            "../tests/fixtures/get_note_with_transcript.json"
+        ))
+        .unwrap();
+        upsert_notes_in_conn(&mut conn, std::slice::from_ref(&note)).unwrap();
+
+        let jsonl = export_jsonl_from_conn(&conn).unwrap();
+        let rows: Vec<serde_json::Value> = jsonl
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["id"], note.id);
+        assert_eq!(rows[0]["cached_detail"], true);
+        assert_eq!(rows[0]["cached_transcript"], true);
     }
 }
