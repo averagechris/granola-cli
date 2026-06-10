@@ -55,10 +55,11 @@ cat > "${site_dir}/index.html" <<EOF
 
   <h2>What's new in v${version}</h2>
   <ul>
-    <li>Top-level <code>granola --version</code> output for quick local version checks.</li>
-    <li><code>granola doctor</code> reports the installed version, latest hosted version, and whether an update is available.</li>
-    <li>Doctor JSON output includes version-check fields for automation and agents.</li>
-    <li>Existing v0.4 improvements remain: adaptive table/list output, explicit JSON formats, SQLite FTS search, and write-through caching.</li>
+    <li>Use copied Granola note URLs anywhere a raw <code>not_...</code> note ID is accepted.</li>
+    <li>Save and rerun reusable selectors with <code>granola views create|list|show|run|delete</code>.</li>
+    <li>Prepare meeting reviews and agent handoffs with <code>granola digest</code> and <code>granola context</code>.</li>
+    <li>Redact sensitive note output with <code>--redact emails,phones,secrets,attendees</code>.</li>
+    <li>Poll for updates with <code>granola watch</code> and maintain local data with expanded <code>granola cache</code> utilities.</li>
   </ul>
 
   <h2>Binary downloads</h2>

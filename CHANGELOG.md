@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.6.0 - 2026-06-10
+
+### Added
+
+- Note commands now accept copied Granola note URLs anywhere a raw `not_...` note ID is accepted.
+- Saved reusable note selectors with `granola views create|list|show|run|delete` for local search views and API-backed list views.
+- `granola digest` for lightweight recent-meeting summaries grouped by day and owner.
+- `granola context` for bounded Markdown or JSON note bundles tailored for agent workflows.
+- Privacy redaction with `--redact emails,phones,secrets,attendees` on full note output paths.
+- `granola watch` for polling newly visible or updated notes.
+- Cache maintenance utilities: `granola cache path`, `verify`, `vacuum`, and `export --format jsonl`.
+
+### Changed
+
+- Documentation now covers saved views, context bundles, redaction, watch polling, and cache maintenance workflows.
+- Test coverage now exercises the new workflow commands, context rendering, digest grouping, watch deduplication, redaction, and cache export behavior.
+
 ## v0.5.0 - 2026-06-10
 
 ### Added
