@@ -98,6 +98,8 @@ enum Command {
     Digest(commands::digest::DigestCommand),
     /// Build a bounded note bundle for agents.
     Context(commands::context::ContextCommand),
+    /// Poll for newly visible or updated notes.
+    Watch(commands::watch::WatchCommand),
     /// Sync notes into the local non-secret cache.
     Sync(commands::sync::SyncCommand),
     /// Inspect or clear the local non-secret cache.
@@ -211,6 +213,7 @@ async fn run(
         Command::Context(command) => {
             commands::context::handle(command, api_key_override, output).await
         }
+        Command::Watch(command) => commands::watch::handle(command, api_key_override, output).await,
         Command::Sync(command) => commands::sync::handle(command, api_key_override, output).await,
         Command::Cache(command) => commands::cache::handle(command, output),
         Command::Config(command) => commands::config::handle(command, output),

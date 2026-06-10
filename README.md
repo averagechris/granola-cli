@@ -49,6 +49,9 @@ granola digest --since 7d --all
 granola context --since 7d --include-transcript --max-bytes 200000 -o context.md
 granola context --since 7d --include-transcript --redact emails,phones,secrets
 
+# Poll for newly visible or updated notes.
+granola watch --since 2h --interval-seconds 60
+
 # Print the machine-readable integration contract for coding agents.
 granola agent --output json-compact
 
@@ -122,6 +125,7 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola views create|list|show|delete|run`
 - `granola digest [--since 7d] [--folder-id FOL_ID] [--all] [--limit N]`
 - `granola context [NOTE_ID_OR_URL ... | --ids-file FILE | --stdin | list filters] [--include-transcript] [--format markdown|json] [--max-bytes N] [-o FILE]`
+- `granola watch [--since 2h] [--updated-since 30m] [--folder-id FOL_ID] [--interval-seconds 60] [--iterations N] [--include-existing]`
 
 Redaction flags are available on note detail, hydrate, export, and context commands with `--redact emails,phones,secrets,attendees`.
 - `granola config show|path|set KEY VALUE`
