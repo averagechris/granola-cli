@@ -2,6 +2,7 @@ pub mod api;
 pub mod auth;
 pub mod cache;
 pub mod config;
+pub mod context;
 pub mod digest;
 pub mod export;
 pub mod folders;

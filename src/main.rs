@@ -95,6 +95,8 @@ enum Command {
     Export(commands::export::ExportCommand),
     /// Summarize recent note metadata for review.
     Digest(commands::digest::DigestCommand),
+    /// Build a bounded note bundle for agents.
+    Context(commands::context::ContextCommand),
     /// Sync notes into the local non-secret cache.
     Sync(commands::sync::SyncCommand),
     /// Inspect or clear the local non-secret cache.
@@ -204,6 +206,9 @@ async fn run(
         }
         Command::Digest(command) => {
             commands::digest::handle(command, api_key_override, output).await
+        }
+        Command::Context(command) => {
+            commands::context::handle(command, api_key_override, output).await
         }
         Command::Sync(command) => commands::sync::handle(command, api_key_override, output).await,
         Command::Cache(command) => commands::cache::handle(command, output),

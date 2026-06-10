@@ -45,6 +45,9 @@ granola views run customer-calls
 # Generate a lightweight recent-meetings digest.
 granola digest --since 7d --all
 
+# Build a bounded Markdown bundle for agents.
+granola context --since 7d --include-transcript --max-bytes 200000 -o context.md
+
 # Print the machine-readable integration contract for coding agents.
 granola agent --output json-compact
 
@@ -117,6 +120,7 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola cache status|clear`
 - `granola views create|list|show|delete|run`
 - `granola digest [--since 7d] [--folder-id FOL_ID] [--all] [--limit N]`
+- `granola context [NOTE_ID_OR_URL ... | --ids-file FILE | --stdin | list filters] [--include-transcript] [--format markdown|json] [--max-bytes N] [-o FILE]`
 - `granola config show|path|set KEY VALUE`
 - `granola completions zsh|bash|fish|powershell|elvish`
 - `granola completions install zsh|bash|fish|powershell|elvish`

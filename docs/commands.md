@@ -118,6 +118,7 @@ granola views show NAME
 granola views run NAME
 granola views delete NAME
 granola digest [--since 7d] [--folder-id FOL_ID] [--all] [--limit N]
+granola context [NOTE_ID_OR_URL ... | --ids-file FILE | --stdin | list filters] [--include-transcript] [--format markdown|json] [--max-bytes N] [-o FILE]
 granola config show
 granola config path
 granola config set output json
