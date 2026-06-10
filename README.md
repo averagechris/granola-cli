@@ -121,7 +121,7 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola export note NOTE_ID_OR_URL [--format markdown|json|txt|transcript] [--include-transcript] [--frontmatter] [-o FILE] [--force|--skip-existing]`
 - `granola export notes [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--format jsonl|markdown|json] [-o FILE | --output-dir DIR] [--include-transcript] [--frontmatter] [--only-changed] [--force|--skip-existing]`
 - `granola sync [--since 30d] [--all] [--include-transcripts] [--replace]`
-- `granola cache status|clear`
+- `granola cache status|path|verify|vacuum|export|clear`
 - `granola views create|list|show|delete|run`
 - `granola digest [--since 7d] [--folder-id FOL_ID] [--all] [--limit N]`
 - `granola context [NOTE_ID_OR_URL ... | --ids-file FILE | --stdin | list filters] [--include-transcript] [--format markdown|json] [--max-bytes N] [-o FILE]`

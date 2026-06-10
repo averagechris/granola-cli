@@ -110,7 +110,11 @@ granola export notes \
 
 ```bash
 granola sync [--since 30d] [--all] [--include-transcripts] [--replace]
-granola cache status
+granola cache status [--verbose]
+granola cache path
+granola cache verify
+granola cache vacuum
+granola cache export [--format jsonl] [-o FILE]
 granola cache clear
 granola views create NAME [--query QUERY | list filters] [--limit N] [--all]
 granola views list

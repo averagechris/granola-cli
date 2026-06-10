@@ -3,6 +3,7 @@ use crate::types::{Note, NoteSummary, TranscriptItem, User};
 use chrono::{SecondsFormat, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -48,6 +49,17 @@ pub struct CacheStatus {
     pub synced_at: Option<String>,
     pub summaries: usize,
     pub notes: usize,
+    pub hydrated_notes: usize,
+    pub transcript_notes: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CacheVerifyResult {
+    pub path: PathBuf,
+    pub exists: bool,
+    pub integrity_check: Option<String>,
+    pub ok: bool,
+    pub summaries: usize,
     pub hydrated_notes: usize,
     pub transcript_notes: usize,
 }
@@ -182,6 +194,88 @@ pub fn status() -> Result<CacheStatus, CliError> {
         hydrated_notes,
         transcript_notes: count_transcript_notes(&conn)?,
     })
+}
+
+pub fn vacuum() -> Result<CacheStatus, CliError> {
+    let path = cache_path()?;
+    let conn = open_cache(&path)?;
+    conn.execute_batch("VACUUM;").map_err(db_error)?;
+    status()
+}
+
+pub fn verify() -> Result<CacheVerifyResult, CliError> {
+    let status = status()?;
+    if !status.exists {
+        return Ok(CacheVerifyResult {
+            path: status.path,
+            exists: false,
+            integrity_check: None,
+            ok: true,
+            summaries: 0,
+            hydrated_notes: 0,
+            transcript_notes: 0,
+        });
+    }
+    let conn = open_existing(&status.path)?;
+    let integrity_check: String = conn
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .map_err(db_error)?;
+    Ok(CacheVerifyResult {
+        path: status.path,
+        exists: true,
+        ok: integrity_check == "ok",
+        integrity_check: Some(integrity_check),
+        summaries: status.summaries,
+        hydrated_notes: status.hydrated_notes,
+        transcript_notes: status.transcript_notes,
+    })
+}
+
+pub fn export_jsonl() -> Result<Option<String>, CliError> {
+    let path = cache_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let conn = open_existing(&path)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT s.id, s.summary_json, n.note_json, n.includes_transcript \
+             FROM note_summaries s \
+             LEFT JOIN notes n ON n.id = s.id \
+             ORDER BY s.updated_at DESC",
+        )
+        .map_err(db_error)?;
+    let rows = stmt
+        .query_map([], |row| {
+            let id: String = row.get(0)?;
+            let summary_json: String = row.get(1)?;
+            let note_json: Option<String> = row.get(2)?;
+            let includes_transcript: Option<i64> = row.get(3)?;
+            Ok((id, summary_json, note_json, includes_transcript))
+        })
+        .map_err(db_error)?;
+    let mut output = String::new();
+    for row in rows {
+        let (id, summary_json, note_json, includes_transcript) = row.map_err(db_error)?;
+        let summary: serde_json::Value =
+            serde_json::from_str(&summary_json).map_err(CliError::from)?;
+        let note: Option<serde_json::Value> = note_json
+            .map(|value| serde_json::from_str(&value))
+            .transpose()
+            .map_err(CliError::from)?;
+        output.push_str(
+            &serde_json::to_string(&json!({
+                "id": id,
+                "summary": summary,
+                "note": note,
+                "cached_detail": note.is_some(),
+                "cached_transcript": includes_transcript.unwrap_or(0) != 0,
+            }))
+            .map_err(CliError::from)?,
+        );
+        output.push('\n');
+    }
+    Ok(Some(output))
 }
 
 pub fn search(query: &str, limit: Option<usize>) -> Result<Option<Vec<CacheSearchHit>>, CliError> {
