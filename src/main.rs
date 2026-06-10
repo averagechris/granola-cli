@@ -6,6 +6,7 @@ mod error;
 mod keyring;
 mod note_ref;
 mod output;
+mod redaction;
 mod types;
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};

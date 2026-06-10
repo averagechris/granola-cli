@@ -2,6 +2,7 @@ use crate::api::{resolve_api_key, validate_page_size, GranolaClient, ListNotesPa
 use crate::error::CliError;
 use crate::note_ref::normalize_note_id;
 use crate::output::{print_json, OutputOptions};
+use crate::redaction::{redact_note, RedactionKind};
 use crate::types::{Note, NoteSummary, TranscriptItem};
 use chrono::{Duration, SecondsFormat, Utc};
 use clap::{Args, Subcommand, ValueEnum};
@@ -39,6 +40,9 @@ struct ExportNoteCommand {
     /// Add YAML frontmatter to markdown exports.
     #[arg(long)]
     frontmatter: bool,
+    /// Redact sensitive data in output. Repeat or comma-separate values: emails, phones, secrets, attendees.
+    #[arg(long, value_enum, value_delimiter = ',')]
+    redact: Vec<RedactionKind>,
     /// Write to this file instead of stdout.
     #[arg(short, long)]
     output_file: Option<PathBuf>,
@@ -103,6 +107,9 @@ struct ExportNotesCommand {
     /// Add YAML frontmatter to markdown exports.
     #[arg(long)]
     frontmatter: bool,
+    /// Redact sensitive data in output. Repeat or comma-separate values: emails, phones, secrets, attendees.
+    #[arg(long, value_enum, value_delimiter = ',')]
+    redact: Vec<RedactionKind>,
     /// Skip unchanged output-dir notes using the export manifest.
     #[arg(long)]
     only_changed: bool,
@@ -178,7 +185,8 @@ async fn export_note(
             NoteExportFormat::Transcript | NoteExportFormat::Json
         );
     let note_id = normalize_note_id(&command.note_id)?;
-    let note = client.get_note(&note_id, include_transcript).await?;
+    let mut note = client.get_note(&note_id, include_transcript).await?;
+    redact_note(&mut note, &command.redact);
     let content = match command.format {
         NoteExportFormat::Markdown => {
             render_note_markdown(&note, command.include_transcript, command.frontmatter)
@@ -257,9 +265,10 @@ async fn export_notes_to_dir(
             }
         }
 
-        let note = client
+        let mut note = client
             .get_note(&summary.id, command.include_transcript)
             .await?;
+        redact_note(&mut note, &command.redact);
         let extension = match command.format {
             NotesExportFormat::Markdown => "md",
             NotesExportFormat::Json => "json",

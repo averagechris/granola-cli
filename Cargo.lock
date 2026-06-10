@@ -938,6 +938,7 @@ dependencies = [
  "keyring",
  "open",
  "predicates",
+ "regex",
  "reqwest",
  "rusqlite",
  "serde",

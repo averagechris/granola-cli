@@ -6,6 +6,7 @@ use crate::cache::{self, CacheStore};
 use crate::error::CliError;
 use crate::note_ref::normalize_note_id;
 use crate::output::{print_json, print_rows, OutputOptions};
+use crate::redaction::{redact_note, redact_notes, RedactionKind};
 use crate::types::{Note, NoteSummary};
 use chrono::{Duration, SecondsFormat, Utc};
 use clap::{Args, Subcommand, ValueEnum};
@@ -97,6 +98,9 @@ struct GetNoteCommand {
     /// Include the transcript in the response.
     #[arg(long, value_parser = ["transcript"])]
     include: Option<String>,
+    /// Redact sensitive data in output. Repeat or comma-separate values: emails, phones, secrets, attendees.
+    #[arg(long, value_enum, value_delimiter = ',')]
+    redact: Vec<RedactionKind>,
 }
 
 #[derive(Debug, Args)]
@@ -115,6 +119,9 @@ struct HydrateNotesCommand {
     /// Emit newline-delimited JSON, one note per line.
     #[arg(long)]
     jsonl: bool,
+    /// Redact sensitive data in output. Repeat or comma-separate values: emails, phones, secrets, attendees.
+    #[arg(long, value_enum, value_delimiter = ',')]
+    redact: Vec<RedactionKind>,
     /// Return notes created before this date or date-time when selecting by filters.
     #[arg(long)]
     created_before: Option<String>,
@@ -360,6 +367,7 @@ async fn hydrate_notes(
         notes.push(client.get_note(&id, command.include_transcript).await?);
     }
     cache_notes_if_enabled(cache_store, &notes, write_through_cache)?;
+    redact_notes(&mut notes, &command.redact);
 
     if command.jsonl {
         for note in &notes {
@@ -509,12 +517,13 @@ async fn get_note(
 ) -> Result<(), CliError> {
     let include_transcript = command.include.as_deref() == Some("transcript");
     let note_id = normalize_note_id(&command.note_id)?;
-    let note = client.get_note(&note_id, include_transcript).await?;
+    let mut note = client.get_note(&note_id, include_transcript).await?;
     cache_notes_if_enabled(
         cache_store,
         std::slice::from_ref(&note),
         write_through_cache,
     )?;
+    redact_note(&mut note, &command.redact);
 
     if output.is_json() {
         return print_json(&note, output);

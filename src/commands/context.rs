@@ -2,6 +2,7 @@ use crate::api::{resolve_api_key, validate_page_size, GranolaClient, ListNotesPa
 use crate::error::CliError;
 use crate::note_ref::normalize_note_id;
 use crate::output::{print_json, OutputOptions};
+use crate::redaction::{redact_notes, RedactionKind};
 use crate::types::{Note, TranscriptItem};
 use chrono::{Duration, SecondsFormat, Utc};
 use clap::{Args, ValueEnum};
@@ -23,6 +24,9 @@ pub struct ContextCommand {
     /// Include transcripts in the context bundle.
     #[arg(long)]
     include_transcript: bool,
+    /// Redact sensitive data in output. Repeat or comma-separate values: emails, phones, secrets, attendees.
+    #[arg(long, value_enum, value_delimiter = ',')]
+    redact: Vec<RedactionKind>,
     /// Output format.
     #[arg(long, value_enum, default_value_t = ContextFormat::Markdown)]
     format: ContextFormat,
@@ -89,6 +93,7 @@ pub async fn handle(
     for id in ids {
         notes.push(client.get_note(&id, command.include_transcript).await?);
     }
+    redact_notes(&mut notes, &command.redact);
 
     if output.is_json() || matches!(command.format, ContextFormat::Json) {
         let envelope = ContextEnvelope {

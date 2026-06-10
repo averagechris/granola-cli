@@ -128,3 +128,5 @@ granola agent
 granola completions zsh|bash|fish|powershell|elvish
 granola completions install zsh|bash|fish|powershell|elvish
 ```
+
+Commands that print or write full note content support privacy redaction with repeated or comma-separated `--redact emails,phones,secrets,attendees` values.
