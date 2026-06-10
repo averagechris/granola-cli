@@ -1,0 +1,9 @@
+---
+source: tests/output_snapshots.rs
+expression: stdout
+---
+id: not_mint
+title: Mint Planning
+owner: chris@example.com
+updated_at: 2026-06-09T00:00:00Z
+cached: full

@@ -20,7 +20,7 @@ granola recent
 granola last --include-transcript
 
 # Get a note, including transcript, as compact JSON.
-granola notes get not_1d3tmYTlCICgjy --include transcript --output json --compact
+granola notes get not_1d3tmYTlCICgjy --include transcript --output json-compact
 
 # Hydrate many notes into full note records for agents.
 granola notes hydrate --since 7d --include-transcript --jsonl
@@ -34,14 +34,14 @@ granola folders list
 granola folders tree
 
 # Agent-friendly JSON with field projection.
-granola notes list --output json --compact --fields notes.id,notes.title,notes.owner.email,count,has_more,cursor
+granola notes list --output json-compact --fields notes.id,notes.title,notes.owner.email,count,has_more,cursor
 
 # Print the machine-readable integration contract for coding agents.
-granola agent --output json --compact
+granola agent --output json-compact
 
 # Optional non-secret defaults and profiles.
 granola config set profile.agent.output json
-granola config set profile.agent.compact true
+granola config set profile.agent.output json-compact
 granola --profile agent notes list --since 7d
 
 # Export one note to Markdown.
@@ -51,7 +51,7 @@ granola export note not_1d3tmYTlCICgjy --format markdown --include-transcript -o
 granola export notes --since 30d --format markdown --output-dir ./granola-notes --include-transcript --frontmatter --only-changed
 
 # Debug a documented Granola endpoint without exposing headers.
-granola api get /v1/notes --query page_size=5 --output json --compact
+granola api get /v1/notes --query page_size=5 --output json-compact
 ```
 
 ## Installation
@@ -114,8 +114,7 @@ See [Hosted Downloads](docs/downloads.md).
 
 Global scriptability flags:
 
-- `--output table|json`
-- `--compact`
+- `--output table|list|json|json-compact|json-pretty` (the default output automatically falls back from table to list-style blocks when it exceeds terminal width; explicit `--output table` is always respected)
 - `--fields a,b,c`
 - `--quiet`
 - `--api-key KEY` for process-local auth override only
@@ -138,6 +137,13 @@ nix run .#ci-clippy
 nix run .#ci-test
 nix run .#ci-deny
 nix run .#ci-audit
+```
+
+Output formatting has snapshot coverage so contributors can see and preserve the expected table, list, and JSON styles:
+
+```bash
+cargo test --test output_snapshots
+INSTA_UPDATE=always cargo test --test output_snapshots
 ```
 
 ### Hosted download publishing

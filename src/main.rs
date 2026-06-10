@@ -21,10 +21,6 @@ struct Cli {
     #[arg(long, value_enum, global = true)]
     output: Option<OutputFormat>,
 
-    /// Emit compact JSON without whitespace.
-    #[arg(long, global = true)]
-    compact: bool,
-
     /// Limit JSON output to comma-separated field paths.
     #[arg(long, value_delimiter = ',', global = true)]
     fields: Vec<String>,
@@ -53,7 +49,10 @@ struct Cli {
 pub enum OutputFormat {
     #[default]
     Table,
+    List,
     Json,
+    JsonCompact,
+    JsonPretty,
 }
 
 #[derive(Debug, Subcommand)]
@@ -139,22 +138,18 @@ async fn main() {
         .output
         .or(configured_output)
         .unwrap_or(OutputFormat::Table);
-    let compact = if arg_present("--compact") {
-        cli.compact
-    } else {
-        effective_config.compact.unwrap_or(cli.compact)
-    };
+    let output_format_explicit = arg_present("--output") || configured_output.is_some();
     let quiet = if arg_present("--quiet") || arg_present("-q") {
         cli.quiet
     } else {
         effective_config.quiet.unwrap_or(cli.quiet)
     };
-    let output = OutputOptions::new(output_format, compact, cli.fields, quiet);
+    let output = OutputOptions::new(output_format, output_format_explicit, cli.fields, quiet);
 
     let write_through_cache = !cli.no_cache;
     if let Err(err) = run(cli.command, cli.api_key, write_through_cache, &output).await {
         if output.is_json() {
-            emit_error_json(&err, output.compact);
+            emit_error_json(&err, output.json_compact());
         } else {
             eprintln!("error: {err}");
         }

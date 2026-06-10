@@ -21,7 +21,7 @@ granola auth login --key-stdin --validate < ./scratch/token
 ## Check status
 
 ```bash
-granola auth status --validate --output json --compact
+granola auth status --validate --output json-compact
 ```
 
 The CLI reports whether auth is configured without printing secrets.

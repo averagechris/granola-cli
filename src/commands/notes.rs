@@ -3,7 +3,7 @@ use crate::api::{
 };
 use crate::cache;
 use crate::error::CliError;
-use crate::output::{print_json, OutputOptions};
+use crate::output::{print_json, print_rows, OutputOptions};
 use crate::types::{Note, NoteSummary};
 use chrono::{Duration, SecondsFormat, Utc};
 use clap::{Args, Subcommand, ValueEnum};
@@ -267,7 +267,7 @@ async fn list_notes(
         );
     }
 
-    print_note_table(&notes, command.no_truncate);
+    print_note_table(&notes, command.no_truncate, output);
     Ok(())
 }
 
@@ -307,7 +307,7 @@ async fn search_notes(
         );
     }
 
-    print_search_result_table(&hits, &query, &status);
+    print_search_result_table(&hits, &query, &status, output);
     if let Some(warning) =
         warning.filter(|_| count == 0 || status.summaries > status.hydrated_notes)
     {
@@ -341,7 +341,7 @@ async fn hydrate_notes(
         return print_json(&json!({ "notes": notes, "count": notes.len() }), output);
     }
 
-    print_hydrated_note_table(&notes);
+    print_hydrated_note_table(&notes, output);
     Ok(())
 }
 
@@ -574,7 +574,7 @@ struct NoteRow {
     updated_at: String,
 }
 
-fn print_note_table(notes: &[NoteSummary], no_truncate: bool) {
+fn print_note_table(notes: &[NoteSummary], no_truncate: bool, output: &OutputOptions) {
     let rows: Vec<NoteRow> = notes
         .iter()
         .map(|note| NoteRow {
@@ -594,11 +594,12 @@ fn print_note_table(notes: &[NoteSummary], no_truncate: bool) {
             rows.into_iter()
                 .map(|row| vec![row.id, row.title, row.owner, row.created_at, row.updated_at])
                 .collect(),
+            output,
         );
     }
 }
 
-fn print_hydrated_note_table(notes: &[Note]) {
+fn print_hydrated_note_table(notes: &[Note], output: &OutputOptions) {
     if notes.is_empty() {
         println!("No notes found");
         return;
@@ -618,6 +619,7 @@ fn print_hydrated_note_table(notes: &[Note]) {
                 ]
             })
             .collect(),
+        output,
     );
 }
 
@@ -625,6 +627,7 @@ fn print_search_result_table(
     hits: &[cache::CacheSearchHit],
     query: &str,
     status: &cache::CacheStatus,
+    output: &OutputOptions,
 ) {
     if hits.is_empty() {
         print_no_search_hits(query, status);
@@ -644,6 +647,7 @@ fn print_search_result_table(
                 ]
             })
             .collect(),
+        output,
     );
 }
 
@@ -668,39 +672,6 @@ fn cached_label(hit: &cache::CacheSearchHit) -> String {
     } else {
         "summary".to_string()
     }
-}
-
-fn print_rows(headers: &[&str], rows: Vec<Vec<String>>) {
-    let mut widths: Vec<usize> = headers.iter().map(|header| header.len()).collect();
-    for row in &rows {
-        for (index, cell) in row.iter().enumerate() {
-            widths[index] = widths[index].max(cell.len());
-        }
-    }
-
-    print_table_line(&widths);
-    print_table_row(headers.iter().copied(), &widths);
-    print_table_line(&widths);
-    for row in &rows {
-        print_table_row(row.iter().map(String::as_str), &widths);
-    }
-    print_table_line(&widths);
-}
-
-fn print_table_line(widths: &[usize]) {
-    print!("+");
-    for width in widths {
-        print!("-{:-<width$}-+", "", width = width);
-    }
-    println!();
-}
-
-fn print_table_row<'a>(cells: impl IntoIterator<Item = &'a str>, widths: &[usize]) {
-    print!("|");
-    for (cell, width) in cells.into_iter().zip(widths) {
-        print!(" {cell:<width$} |", width = width);
-    }
-    println!();
 }
 
 fn display_title(note: &NoteSummary, no_truncate: bool) -> String {

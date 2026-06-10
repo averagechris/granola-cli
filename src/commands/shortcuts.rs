@@ -1,7 +1,7 @@
 use crate::api::{resolve_api_key, try_resolve_api_key, GranolaClient, ListNotesParams};
 use crate::cache;
 use crate::error::CliError;
-use crate::output::{print_json, OutputOptions};
+use crate::output::{print_json, print_rows, OutputOptions};
 use crate::types::{Note, NoteSummary};
 use chrono::{Duration, SecondsFormat, Utc};
 use clap::Args;
@@ -168,7 +168,7 @@ pub async fn search(
             output,
         );
     }
-    print_search_result_table(&hits, &query, &status);
+    print_search_result_table(&hits, &query, &status, output);
     if let Some(warning) =
         warning.filter(|_| hits.is_empty() || status.summaries > status.hydrated_notes)
     {
@@ -211,7 +211,7 @@ async fn list_shortcut(
         );
     }
 
-    print_note_table(&notes);
+    print_note_table(&notes, output);
     Ok(())
 }
 
@@ -287,7 +287,7 @@ fn print_note_detail(note: &Note) {
     );
 }
 
-fn print_note_table(notes: &[NoteSummary]) {
+fn print_note_table(notes: &[NoteSummary], output: &OutputOptions) {
     if notes.is_empty() {
         println!("No notes found");
         return;
@@ -305,6 +305,7 @@ fn print_note_table(notes: &[NoteSummary]) {
                 ]
             })
             .collect(),
+        output,
     );
 }
 
@@ -312,6 +313,7 @@ fn print_search_result_table(
     hits: &[cache::CacheSearchHit],
     query: &str,
     status: &cache::CacheStatus,
+    output: &OutputOptions,
 ) {
     if hits.is_empty() {
         print_no_search_hits(query, status);
@@ -331,6 +333,7 @@ fn print_search_result_table(
                 ]
             })
             .collect(),
+        output,
     );
 }
 
@@ -355,38 +358,6 @@ fn cached_label(hit: &cache::CacheSearchHit) -> String {
     } else {
         "summary".to_string()
     }
-}
-
-fn print_rows(headers: &[&str], rows: Vec<Vec<String>>) {
-    let mut widths: Vec<usize> = headers.iter().map(|header| header.len()).collect();
-    for row in &rows {
-        for (index, cell) in row.iter().enumerate() {
-            widths[index] = widths[index].max(cell.len());
-        }
-    }
-    print_table_line(&widths);
-    print_table_row(headers.iter().copied(), &widths);
-    print_table_line(&widths);
-    for row in &rows {
-        print_table_row(row.iter().map(String::as_str), &widths);
-    }
-    print_table_line(&widths);
-}
-
-fn print_table_line(widths: &[usize]) {
-    print!("+");
-    for width in widths {
-        print!("-{:-<width$}-+", "", width = width);
-    }
-    println!();
-}
-
-fn print_table_row<'a>(cells: impl IntoIterator<Item = &'a str>, widths: &[usize]) {
-    print!("|");
-    for (cell, width) in cells.into_iter().zip(widths) {
-        print!(" {cell:<width$} |", width = width);
-    }
-    println!();
 }
 
 fn relative_time_after(duration: Duration) -> String {

@@ -3,7 +3,7 @@
 Use JSON for scripts and AI agents:
 
 ```bash
-granola notes list --output json --compact
+granola notes list --output json-compact
 granola folders list --output json --fields id,name
 granola notes get not_AAAAAAAAAAAAAA --include transcript --output json
 granola api get /v1/notes --query page_size=5 --output json
@@ -40,7 +40,7 @@ Paginated JSON commands return an envelope so scripts and agents can continue fr
 Use `notes hydrate` when an agent needs full note records for several IDs or a filtered list without shell loops:
 
 ```bash
-granola notes hydrate not_A not_B --include-transcript --output json --compact
+granola notes hydrate not_A not_B --include-transcript --output json-compact
 granola notes hydrate --since 7d --include-transcript --jsonl
 ```
 
@@ -49,7 +49,7 @@ granola notes hydrate --since 7d --include-transcript --jsonl
 Agents can discover the stable command, output, error, and constraint contract with:
 
 ```bash
-granola agent --output json --compact
+granola agent --output json-compact
 ```
 
 ## Cached search
@@ -58,7 +58,7 @@ Use the simple local cache for repeated search workflows:
 
 ```bash
 granola sync --since 30d --all --include-transcripts
-granola notes search "pricing" --output json --compact --fields notes.id,notes.title,count,cache_synced_at
+granola notes search "pricing" --output json-compact --fields notes.id,notes.title,count,cache_synced_at
 ```
 
 ## Error shape

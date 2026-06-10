@@ -2,27 +2,56 @@ use crate::error::CliError;
 use crate::OutputFormat;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Debug, Clone)]
 pub struct OutputOptions {
     pub format: OutputFormat,
-    pub compact: bool,
+    pub format_explicit: bool,
     pub fields: Vec<String>,
     pub quiet: bool,
 }
 
 impl OutputOptions {
-    pub fn new(format: OutputFormat, compact: bool, fields: Vec<String>, quiet: bool) -> Self {
+    pub fn new(
+        format: OutputFormat,
+        format_explicit: bool,
+        fields: Vec<String>,
+        quiet: bool,
+    ) -> Self {
         Self {
             format,
-            compact,
+            format_explicit,
             fields,
             quiet,
         }
     }
 
     pub fn is_json(&self) -> bool {
-        self.format == OutputFormat::Json
+        matches!(
+            self.format,
+            OutputFormat::Json | OutputFormat::JsonCompact | OutputFormat::JsonPretty
+        )
+    }
+
+    pub fn json_compact(&self) -> bool {
+        match self.format {
+            OutputFormat::JsonCompact => true,
+            OutputFormat::JsonPretty => false,
+            OutputFormat::Json => false,
+            OutputFormat::Table | OutputFormat::List => false,
+        }
+    }
+}
+
+pub fn print_rows(headers: &[&str], rows: Vec<Vec<String>>, output: &OutputOptions) {
+    match output.format {
+        OutputFormat::Json => unreachable!("JSON rows should be emitted with print_json"),
+        OutputFormat::JsonCompact => unreachable!("JSON rows should be emitted with print_json"),
+        OutputFormat::JsonPretty => unreachable!("JSON rows should be emitted with print_json"),
+        OutputFormat::List => print_row_list(headers, &rows),
+        OutputFormat::Table if output.format_explicit => print_table(headers, &rows),
+        OutputFormat::Table => print_adaptive_table(headers, &rows),
     }
 }
 
@@ -33,7 +62,7 @@ pub fn print_json<T: Serialize>(value: &T, output: &OutputOptions) -> Result<(),
         value = select_fields(&value, &output.fields);
     }
 
-    let text = if output.compact {
+    let text = if output.json_compact() {
         serde_json::to_string(&value)?
     } else {
         serde_json::to_string_pretty(&value)?
@@ -160,6 +189,88 @@ fn merge_maps(into: &mut Map<String, Value>, from: Map<String, Value>) {
     }
 }
 
+fn print_adaptive_table(headers: &[&str], rows: &[Vec<String>]) {
+    let widths = table_widths(headers, rows);
+    if terminal_width().is_some_and(|terminal_width| table_width(&widths) > terminal_width) {
+        print_row_list(headers, rows);
+        return;
+    }
+
+    print_table_with_widths(headers, rows, &widths);
+}
+
+fn print_table(headers: &[&str], rows: &[Vec<String>]) {
+    let widths = table_widths(headers, rows);
+    print_table_with_widths(headers, rows, &widths);
+}
+
+fn print_table_with_widths(headers: &[&str], rows: &[Vec<String>], widths: &[usize]) {
+    print_table_line(widths);
+    print_table_row(headers.iter().copied(), widths);
+    print_table_line(widths);
+    for row in rows {
+        print_table_row(row.iter().map(String::as_str), widths);
+    }
+    print_table_line(widths);
+}
+
+fn table_widths(headers: &[&str], rows: &[Vec<String>]) -> Vec<usize> {
+    let mut widths: Vec<usize> = headers
+        .iter()
+        .map(|header| UnicodeWidthStr::width(*header))
+        .collect();
+    for row in rows {
+        for (index, cell) in row.iter().enumerate() {
+            widths[index] = widths[index].max(UnicodeWidthStr::width(cell.as_str()));
+        }
+    }
+    widths
+}
+
+fn table_width(widths: &[usize]) -> usize {
+    1 + widths.iter().map(|width| width + 3).sum::<usize>()
+}
+
+fn terminal_width() -> Option<usize> {
+    if let Some(width) = std::env::var("COLUMNS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|width| *width > 0)
+    {
+        return Some(width);
+    }
+
+    terminal_size::terminal_size().map(|(width, _)| usize::from(width.0))
+}
+
+fn print_table_line(widths: &[usize]) {
+    print!("+");
+    for width in widths {
+        print!("-{:-<width$}-+", "", width = width);
+    }
+    println!();
+}
+
+fn print_table_row<'a>(cells: impl IntoIterator<Item = &'a str>, widths: &[usize]) {
+    print!("|");
+    for (cell, width) in cells.into_iter().zip(widths) {
+        let padding = width.saturating_sub(UnicodeWidthStr::width(cell));
+        print!(" {cell}{} |", " ".repeat(padding));
+    }
+    println!();
+}
+
+fn print_row_list(headers: &[&str], rows: &[Vec<String>]) {
+    for (row_index, row) in rows.iter().enumerate() {
+        if row_index > 0 {
+            println!();
+        }
+        for (header, cell) in headers.iter().zip(row) {
+            println!("{header}: {cell}");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,5 +313,23 @@ mod tests {
                 "count": 1
             })
         );
+    }
+
+    #[test]
+    fn calculates_ascii_table_width() {
+        let rows = vec![vec!["not_123".to_string(), "Planning".to_string()]];
+        let widths = table_widths(&["id", "title"], &rows);
+
+        assert_eq!(widths, vec![7, 8]);
+        assert_eq!(table_width(&widths), 22);
+    }
+
+    #[test]
+    fn calculates_table_width_with_wide_unicode() {
+        let rows = vec![vec!["not_123".to_string(), "📜 EPD × CS".to_string()]];
+        let widths = table_widths(&["id", "title"], &rows);
+
+        assert_eq!(widths, vec![7, 11]);
+        assert_eq!(table_width(&widths), 25);
     }
 }

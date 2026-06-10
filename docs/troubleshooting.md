@@ -25,7 +25,7 @@ Granola documents a 25-request burst and 5 requests/second sustained limit. The 
 Use the guarded raw API command to inspect documented endpoints without exposing headers or secrets:
 
 ```bash
-granola api get /v1/notes --query page_size=5 --output json --compact
+granola api get /v1/notes --query page_size=5 --output json-compact
 ```
 
 Only `/v1/...` paths are accepted.

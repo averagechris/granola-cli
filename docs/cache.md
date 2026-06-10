@@ -4,8 +4,8 @@ The local cache is a non-secret SQLite database in the OS cache directory. It st
 
 ```bash
 granola sync --since 30d --all --include-transcripts
-granola cache status --output json --compact
-granola notes search attendees:will "async config" --output json --compact
+granola cache status --output json-compact
+granola notes search attendees:will "async config" --output json-compact
 printf 'transcript:renewal' | granola search
 granola cache clear
 ```

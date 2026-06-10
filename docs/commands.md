@@ -2,8 +2,7 @@
 
 Global flags available on every command:
 
-- `--output table|json`
-- `--compact`
+- `--output table|list|json|json-compact|json-pretty`
 - `--fields a,b,c`
 - `--quiet`
 - `--api-key KEY` for one process only
@@ -114,7 +113,7 @@ granola cache clear
 granola config show
 granola config path
 granola config set output json
-granola config set profile.agent.compact true
+granola config set profile.agent.output json-compact
 granola doctor [--validate]
 granola agent
 granola completions zsh|bash|fish|powershell|elvish

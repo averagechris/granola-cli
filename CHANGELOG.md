@@ -30,7 +30,7 @@ This release focuses on making `granola` seamless for humans, scripts, and codin
 
 - Paginated JSON envelopes for list commands, including `count`, `has_more`, `cursor`, and `page_size`.
 - Batch note hydration with `granola notes hydrate` for fetching full note records and transcripts without shell loops.
-- A richer machine-readable agent manifest via `granola agent --output json --compact`.
+- A richer machine-readable agent manifest via `granola agent --output json-compact`.
 - Simple non-secret local cache and search workflows:
   - `granola sync`
   - `granola cache status`

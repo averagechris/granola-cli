@@ -16,7 +16,6 @@ pub struct UserConfig {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ConfigProfile {
     pub output: Option<String>,
-    pub compact: Option<bool>,
     pub quiet: Option<bool>,
 }
 
@@ -40,9 +39,6 @@ impl ConfigProfile {
         if other.output.is_some() {
             self.output = other.output.clone();
         }
-        if other.compact.is_some() {
-            self.compact = other.compact;
-        }
         if other.quiet.is_some() {
             self.quiet = other.quiet;
         }
@@ -52,9 +48,12 @@ impl ConfigProfile {
         match self.output.as_deref() {
             None => Ok(None),
             Some("table") => Ok(Some(OutputFormat::Table)),
+            Some("list") => Ok(Some(OutputFormat::List)),
             Some("json") => Ok(Some(OutputFormat::Json)),
+            Some("json-compact") => Ok(Some(OutputFormat::JsonCompact)),
+            Some("json-pretty") => Ok(Some(OutputFormat::JsonPretty)),
             Some(other) => Err(CliError::invalid_input(format!(
-                "invalid configured output '{other}'; use table or json"
+                "invalid configured output '{other}'; use table, list, json, json-compact, or json-pretty"
             ))),
         }
     }
@@ -119,16 +118,20 @@ pub fn set_value(config: &mut UserConfig, key: &str, value: &str) -> Result<(), 
 
     match key {
         "output" => {
-            if !matches!(value, "table" | "json") {
-                return Err(CliError::invalid_input("output must be table or json"));
+            if !matches!(
+                value,
+                "table" | "list" | "json" | "json-compact" | "json-pretty"
+            ) {
+                return Err(CliError::invalid_input(
+                    "output must be table, list, json, json-compact, or json-pretty",
+                ));
             }
             profile.output = Some(value.to_string());
         }
-        "compact" => profile.compact = Some(parse_bool(value, "compact")?),
         "quiet" => profile.quiet = Some(parse_bool(value, "quiet")?),
         _ => {
             return Err(CliError::invalid_input(
-                "supported config keys are output, compact, quiet, or profile.NAME.output/compact/quiet",
+                "supported config keys are output, quiet, or profile.NAME.output/quiet",
             ));
         }
     }
