@@ -55,6 +55,9 @@ cat > "${site_dir}/index.html" <<EOF
 
   <h2>What's new in v${version}</h2>
   <ul>
+    <li>Adaptive default output that uses tables when they fit and list-style rows in narrow terminals.</li>
+    <li>Explicit output formats for scripts and agents: <code>table</code>, <code>list</code>, <code>json</code>, <code>json-compact</code>, and <code>json-pretty</code>.</li>
+    <li>Unicode-aware table width calculations and snapshot-tested output formatting.</li>
     <li>SQLite-backed local cache with FTS5 search and relevance ranking.</li>
     <li>Field-qualified search queries such as <code>attendees:will "async config"</code> and <code>transcript:renewal</code>.</li>
     <li>Search queries from multiple CLI args or stdin, for example <code>printf 'transcript:renewal' | granola search</code>.</li>

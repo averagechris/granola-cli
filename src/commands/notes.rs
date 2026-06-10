@@ -1,7 +1,8 @@
 use crate::api::{
-    resolve_api_key, try_resolve_api_key, validate_page_size, GranolaClient, ListNotesParams,
+    resolve_api_key, try_resolve_api_key, validate_page_size, GranolaApi, GranolaClient,
+    ListNotesParams,
 };
-use crate::cache;
+use crate::cache::{self, CacheStore};
 use crate::error::CliError;
 use crate::output::{print_json, print_rows, OutputOptions};
 use crate::types::{Note, NoteSummary};
@@ -176,23 +177,27 @@ pub async fn handle(
     write_through_cache: bool,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
+    let cache_store = cache::OsCacheStore;
     match command.command {
-        NotesSubcommand::Search(command) => search_notes(command, api_key_override, output).await,
+        NotesSubcommand::Search(command) => {
+            let warning_client = warning_client(api_key_override);
+            search_notes(command, &cache_store, warning_client.as_ref(), output).await
+        }
         command => {
             let api_key = resolve_api_key(api_key_override)?;
             let client = GranolaClient::new(api_key)?;
             match command {
                 NotesSubcommand::List(command) => {
-                    list_notes(&client, command, write_through_cache, output).await
+                    list_notes(&client, &cache_store, command, write_through_cache, output).await
                 }
                 NotesSubcommand::Get(command) => {
-                    get_note(&client, command, write_through_cache, output).await
+                    get_note(&client, &cache_store, command, write_through_cache, output).await
                 }
                 NotesSubcommand::Hydrate(command) => {
-                    hydrate_notes(&client, command, write_through_cache, output).await
+                    hydrate_notes(&client, &cache_store, command, write_through_cache, output).await
                 }
                 NotesSubcommand::Open(command) => {
-                    open_note(&client, command, write_through_cache, output).await
+                    open_note(&client, &cache_store, command, write_through_cache, output).await
                 }
                 NotesSubcommand::Search(_) => unreachable!(),
             }
@@ -201,30 +206,64 @@ pub async fn handle(
 }
 
 async fn list_notes(
-    client: &GranolaClient,
+    client: &impl GranolaApi,
+    cache_store: &impl CacheStore,
     command: ListNotesCommand,
     write_through_cache: bool,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
+    let result = collect_list_notes(client, &command).await?;
+    cache_summaries_if_enabled(cache_store, &result.notes, write_through_cache)?;
+
+    if output.is_json() {
+        let count = result.notes.len();
+        return print_json(
+            &json!({
+                "notes": result.notes,
+                "count": count,
+                "has_more": result.has_more,
+                "cursor": result.cursor,
+                "page_size": result.page_size,
+            }),
+            output,
+        );
+    }
+
+    print_note_table(&result.notes, command.no_truncate, output);
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct ListNotesResult {
+    notes: Vec<NoteSummary>,
+    has_more: bool,
+    cursor: Option<String>,
+    page_size: u8,
+}
+
+async fn collect_list_notes(
+    client: &impl GranolaApi,
+    command: &ListNotesCommand,
+) -> Result<ListNotesResult, CliError> {
     let page_size = validate_page_size(command.page_size)?;
     let created_after = command
         .since
         .as_deref()
         .map(relative_time_after)
         .transpose()?
-        .or(command.created_after);
+        .or_else(|| command.created_after.clone());
     let updated_after = command
         .updated_since
         .as_deref()
         .map(relative_time_after)
         .transpose()?
-        .or(command.updated_after);
+        .or_else(|| command.updated_after.clone());
     let mut params = ListNotesParams {
-        created_before: command.created_before,
+        created_before: command.created_before.clone(),
         created_after,
         updated_after,
-        folder_id: command.folder_id,
-        cursor: command.cursor,
+        folder_id: command.folder_id.clone(),
+        cursor: command.cursor.clone(),
         page_size: Some(page_size),
     };
     let mut notes = Vec::new();
@@ -252,39 +291,29 @@ async fn list_notes(
     };
 
     sort_notes(&mut notes, command.sort, command.order);
-    cache_summaries_if_enabled(&notes, write_through_cache)?;
-
-    if output.is_json() {
-        return print_json(
-            &json!({
-                "notes": notes,
-                "count": notes.len(),
-                "has_more": has_more,
-                "cursor": next_cursor,
-                "page_size": page_size,
-            }),
-            output,
-        );
-    }
-
-    print_note_table(&notes, command.no_truncate, output);
-    Ok(())
+    Ok(ListNotesResult {
+        notes,
+        has_more,
+        cursor: next_cursor,
+        page_size,
+    })
 }
 
 async fn search_notes(
     command: SearchNotesCommand,
-    api_key_override: Option<String>,
+    cache_store: &impl CacheStore,
+    warning_client: Option<&impl GranolaApi>,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let query = super::resolve_search_query(&command.query, command.stdin)?;
-    let status = cache::status()?;
-    let hits = cache::search(&query, command.limit)?.ok_or_else(|| {
+    let status = cache_store.status()?;
+    let hits = cache_store.search(&query, command.limit)?.ok_or_else(|| {
         CliError::invalid_input(
             "no local cache found; run `granola sync --since 30d --all` before searching",
         )
     })?;
     let count = hits.len();
-    let warning = search_cache_warning(&status, api_key_override).await?;
+    let warning = search_cache_warning(&status, cache_store, warning_client).await?;
 
     if output.is_json() {
         return print_json(
@@ -317,7 +346,8 @@ async fn search_notes(
 }
 
 async fn hydrate_notes(
-    client: &GranolaClient,
+    client: &impl GranolaApi,
+    cache_store: &impl CacheStore,
     command: HydrateNotesCommand,
     write_through_cache: bool,
     output: &OutputOptions,
@@ -328,7 +358,7 @@ async fn hydrate_notes(
     for id in ids {
         notes.push(client.get_note(&id, command.include_transcript).await?);
     }
-    cache_notes_if_enabled(&notes, write_through_cache)?;
+    cache_notes_if_enabled(cache_store, &notes, write_through_cache)?;
 
     if command.jsonl {
         for note in &notes {
@@ -346,7 +376,7 @@ async fn hydrate_notes(
 }
 
 async fn hydrate_note_ids(
-    client: &GranolaClient,
+    client: &impl GranolaApi,
     command: &HydrateNotesCommand,
 ) -> Result<Vec<String>, CliError> {
     let mut ids = command.note_ids.clone();
@@ -388,7 +418,7 @@ async fn hydrate_note_ids(
 }
 
 async fn collect_hydrate_selection_ids(
-    client: &GranolaClient,
+    client: &impl GranolaApi,
     command: &HydrateNotesCommand,
 ) -> Result<Vec<String>, CliError> {
     let page_size = validate_page_size(command.page_size)?;
@@ -455,7 +485,8 @@ fn command_has_selection_filters(command: &HydrateNotesCommand) -> bool {
 }
 
 async fn get_note(
-    client: &GranolaClient,
+    client: &impl GranolaApi,
+    cache_store: &impl CacheStore,
     command: GetNoteCommand,
     write_through_cache: bool,
     output: &OutputOptions,
@@ -464,7 +495,11 @@ async fn get_note(
     let note = client
         .get_note(&command.note_id, include_transcript)
         .await?;
-    cache_notes_if_enabled(std::slice::from_ref(&note), write_through_cache)?;
+    cache_notes_if_enabled(
+        cache_store,
+        std::slice::from_ref(&note),
+        write_through_cache,
+    )?;
 
     if output.is_json() {
         return print_json(&note, output);
@@ -475,13 +510,18 @@ async fn get_note(
 }
 
 async fn open_note(
-    client: &GranolaClient,
+    client: &impl GranolaApi,
+    cache_store: &impl CacheStore,
     command: OpenNoteCommand,
     write_through_cache: bool,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let note = client.get_note(&command.note_id, false).await?;
-    cache_notes_if_enabled(std::slice::from_ref(&note), write_through_cache)?;
+    cache_notes_if_enabled(
+        cache_store,
+        std::slice::from_ref(&note),
+        write_through_cache,
+    )?;
 
     if command.print {
         if output.is_json() {
@@ -510,6 +550,7 @@ async fn open_note(
 }
 
 fn cache_summaries_if_enabled(
+    cache_store: &impl CacheStore,
     summaries: &[NoteSummary],
     write_through_cache: bool,
 ) -> Result<(), CliError> {
@@ -517,20 +558,30 @@ fn cache_summaries_if_enabled(
         return Ok(());
     }
 
-    cache::upsert_summaries(summaries)
+    cache_store.upsert_summaries(summaries)
 }
 
-fn cache_notes_if_enabled(notes: &[Note], write_through_cache: bool) -> Result<(), CliError> {
+fn cache_notes_if_enabled(
+    cache_store: &impl CacheStore,
+    notes: &[Note],
+    write_through_cache: bool,
+) -> Result<(), CliError> {
     if !write_through_cache || notes.is_empty() {
         return Ok(());
     }
 
-    cache::upsert_notes(notes)
+    cache_store.upsert_notes(notes)
+}
+
+fn warning_client(api_key_override: Option<String>) -> Option<GranolaClient> {
+    let api_key = try_resolve_api_key(api_key_override).ok().flatten()?;
+    GranolaClient::new(api_key).ok()
 }
 
 async fn search_cache_warning(
     status: &cache::CacheStatus,
-    api_key_override: Option<String>,
+    cache_store: &impl CacheStore,
+    client: Option<&impl GranolaApi>,
 ) -> Result<Option<String>, CliError> {
     if status.summaries > status.hydrated_notes {
         return Ok(Some(format!(
@@ -540,10 +591,7 @@ async fn search_cache_warning(
         )));
     }
 
-    let Some(api_key) = try_resolve_api_key(api_key_override).ok().flatten() else {
-        return Ok(None);
-    };
-    let Ok(client) = GranolaClient::new(api_key) else {
+    let Some(client) = client else {
         return Ok(None);
     };
     let Ok(response) = client
@@ -559,7 +607,7 @@ async fn search_cache_warning(
     let has_remote_uncached_updates = response
         .notes
         .iter()
-        .any(|summary| !matches!(cache::contains_fresh_summary(summary), Ok(true)));
+        .any(|summary| !matches!(cache_store.contains_fresh_summary(summary), Ok(true)));
 
     Ok(has_remote_uncached_updates.then(|| {
         "newer or unlisted notes may not be in the local cache; run `granola sync --since 30d --all` to refresh before relying on search results".to_string()
@@ -757,7 +805,10 @@ fn print_note_detail(note: &Note) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::User;
+    use crate::api::ListFoldersParams;
+    use crate::types::{ListFoldersResponse, ListNotesResponse, User};
+    use std::collections::VecDeque;
+    use std::sync::Mutex;
 
     #[test]
     fn parses_relative_duration_syntax() {
@@ -785,6 +836,83 @@ mod tests {
         assert_eq!(display_title(&note, true).chars().count(), 100);
     }
 
+    #[tokio::test]
+    async fn collect_list_notes_uses_injected_api_for_paging_limit_and_sort() {
+        let api = FakeApi::with_note_pages(vec![
+            ListNotesResponse {
+                notes: vec![
+                    note_summary("not_C", "Charlie", "2026-01-03"),
+                    note_summary("not_A", "Alpha", "2026-01-01"),
+                ],
+                has_more: true,
+                cursor: Some("cursor-1".to_string()),
+            },
+            ListNotesResponse {
+                notes: vec![
+                    note_summary("not_B", "Bravo", "2026-01-02"),
+                    note_summary("not_D", "Delta", "2026-01-04"),
+                ],
+                has_more: true,
+                cursor: Some("cursor-2".to_string()),
+            },
+        ]);
+        let command = ListNotesCommand {
+            created_before: None,
+            created_after: None,
+            since: None,
+            updated_after: None,
+            updated_since: None,
+            folder_id: Some("fol_test".to_string()),
+            cursor: None,
+            page_size: 2,
+            all: true,
+            limit: Some(3),
+            sort: Some(NoteSortField::Title),
+            order: SortOrder::Asc,
+            no_truncate: false,
+        };
+
+        let result = collect_list_notes(&api, &command).await.unwrap();
+
+        assert_eq!(
+            result
+                .notes
+                .iter()
+                .map(|note| note.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["not_A", "not_B", "not_C"]
+        );
+        assert!(result.has_more);
+        assert_eq!(result.cursor.as_deref(), Some("cursor-2"));
+        assert_eq!(result.page_size, 2);
+
+        let params = api.list_note_params.lock().unwrap();
+        assert_eq!(params.len(), 2);
+        assert_eq!(params[0].folder_id.as_deref(), Some("fol_test"));
+        assert_eq!(params[0].cursor.as_deref(), None);
+        assert_eq!(params[1].cursor.as_deref(), Some("cursor-1"));
+    }
+
+    #[test]
+    fn cache_write_through_uses_injected_cache_store() {
+        let cache = RecordingCache::default();
+        let summaries = vec![note_summary("not_A", "Alpha", "2026-01-01")];
+
+        cache_summaries_if_enabled(&cache, &summaries, true).unwrap();
+
+        assert_eq!(cache.summary_ids.lock().unwrap().as_slice(), &["not_A"]);
+    }
+
+    #[test]
+    fn cache_write_through_skips_injected_cache_when_disabled() {
+        let cache = RecordingCache::default();
+        let summaries = vec![note_summary("not_A", "Alpha", "2026-01-01")];
+
+        cache_summaries_if_enabled(&cache, &summaries, false).unwrap();
+
+        assert!(cache.summary_ids.lock().unwrap().is_empty());
+    }
+
     fn note_summary(id: &str, title: &str, created_at: &str) -> NoteSummary {
         NoteSummary {
             id: id.to_string(),
@@ -796,6 +924,85 @@ mod tests {
             },
             created_at: created_at.to_string(),
             updated_at: created_at.to_string(),
+        }
+    }
+
+    #[derive(Default)]
+    struct FakeApi {
+        note_pages: Mutex<VecDeque<ListNotesResponse>>,
+        list_note_params: Mutex<Vec<ListNotesParams>>,
+    }
+
+    impl FakeApi {
+        fn with_note_pages(pages: Vec<ListNotesResponse>) -> Self {
+            Self {
+                note_pages: Mutex::new(pages.into()),
+                list_note_params: Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    impl GranolaApi for FakeApi {
+        async fn list_notes(
+            &self,
+            params: &ListNotesParams,
+        ) -> Result<ListNotesResponse, CliError> {
+            self.list_note_params.lock().unwrap().push(params.clone());
+            self.note_pages
+                .lock()
+                .unwrap()
+                .pop_front()
+                .ok_or_else(|| CliError::general("unexpected list_notes call"))
+        }
+
+        async fn get_note(
+            &self,
+            _note_id: &str,
+            _include_transcript: bool,
+        ) -> Result<Note, CliError> {
+            Err(CliError::general("unexpected get_note call"))
+        }
+
+        async fn list_folders(
+            &self,
+            _params: &ListFoldersParams,
+        ) -> Result<ListFoldersResponse, CliError> {
+            Err(CliError::general("unexpected list_folders call"))
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingCache {
+        summary_ids: Mutex<Vec<String>>,
+    }
+
+    impl CacheStore for RecordingCache {
+        fn upsert_summaries(&self, summaries: &[NoteSummary]) -> Result<(), CliError> {
+            self.summary_ids
+                .lock()
+                .unwrap()
+                .extend(summaries.iter().map(|summary| summary.id.clone()));
+            Ok(())
+        }
+
+        fn upsert_notes(&self, _notes: &[Note]) -> Result<(), CliError> {
+            Ok(())
+        }
+
+        fn status(&self) -> Result<cache::CacheStatus, CliError> {
+            Err(CliError::general("unexpected status call"))
+        }
+
+        fn search(
+            &self,
+            _query: &str,
+            _limit: Option<usize>,
+        ) -> Result<Option<Vec<cache::CacheSearchHit>>, CliError> {
+            Err(CliError::general("unexpected search call"))
+        }
+
+        fn contains_fresh_summary(&self, _remote: &NoteSummary) -> Result<bool, CliError> {
+            Err(CliError::general("unexpected contains_fresh_summary call"))
         }
     }
 }

@@ -179,6 +179,35 @@ impl GranolaClient {
     }
 }
 
+#[allow(async_fn_in_trait)]
+pub trait GranolaApi {
+    async fn list_notes(&self, params: &ListNotesParams) -> Result<ListNotesResponse, CliError>;
+
+    async fn get_note(&self, note_id: &str, include_transcript: bool) -> Result<Note, CliError>;
+
+    async fn list_folders(
+        &self,
+        params: &ListFoldersParams,
+    ) -> Result<ListFoldersResponse, CliError>;
+}
+
+impl GranolaApi for GranolaClient {
+    async fn list_notes(&self, params: &ListNotesParams) -> Result<ListNotesResponse, CliError> {
+        GranolaClient::list_notes(self, params).await
+    }
+
+    async fn get_note(&self, note_id: &str, include_transcript: bool) -> Result<Note, CliError> {
+        GranolaClient::get_note(self, note_id, include_transcript).await
+    }
+
+    async fn list_folders(
+        &self,
+        params: &ListFoldersParams,
+    ) -> Result<ListFoldersResponse, CliError> {
+        GranolaClient::list_folders(self, params).await
+    }
+}
+
 #[derive(Debug)]
 enum RequestFailure {
     Http {

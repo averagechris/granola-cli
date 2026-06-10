@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.4.0 - 2026-06-10
+
+### Added
+
+- Adaptive default data output that keeps table rendering when it fits and falls back to list-style rows in narrow terminals.
+- Explicit `--output list`, `--output json-compact`, and `--output json-pretty` formats for predictable human and agent-facing output.
+- Snapshot coverage for table, list, compact JSON, and pretty JSON output regressions.
+- Dependency-injection seams for command data access, making note and folder command behavior easier to unit test with fake API/cache implementations.
+
+### Changed
+
+- Explicit `--output table` now always renders an ASCII table, even in narrow terminals.
+- Table width calculations now account for Unicode display width.
+- JSON output mode is now format-driven: `--output json` and `--output json-pretty` emit pretty JSON, while `--output json-compact` emits compact JSON.
+- Removed the old `--compact`, `--pretty`, and config `compact` output controls in favor of explicit output formats.
+
 ## v0.3.0 - 2026-06-09
 
 ### Added

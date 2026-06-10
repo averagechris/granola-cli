@@ -52,6 +52,47 @@ pub struct CacheStatus {
     pub transcript_notes: usize,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OsCacheStore;
+
+pub trait CacheStore {
+    fn upsert_summaries(&self, summaries: &[NoteSummary]) -> Result<(), CliError>;
+    fn upsert_notes(&self, notes: &[Note]) -> Result<(), CliError>;
+    fn status(&self) -> Result<CacheStatus, CliError>;
+    fn search(
+        &self,
+        query: &str,
+        limit: Option<usize>,
+    ) -> Result<Option<Vec<CacheSearchHit>>, CliError>;
+    fn contains_fresh_summary(&self, remote: &NoteSummary) -> Result<bool, CliError>;
+}
+
+impl CacheStore for OsCacheStore {
+    fn upsert_summaries(&self, summaries: &[NoteSummary]) -> Result<(), CliError> {
+        upsert_summaries(summaries)
+    }
+
+    fn upsert_notes(&self, notes: &[Note]) -> Result<(), CliError> {
+        upsert_notes(notes)
+    }
+
+    fn status(&self) -> Result<CacheStatus, CliError> {
+        status()
+    }
+
+    fn search(
+        &self,
+        query: &str,
+        limit: Option<usize>,
+    ) -> Result<Option<Vec<CacheSearchHit>>, CliError> {
+        search(query, limit)
+    }
+
+    fn contains_fresh_summary(&self, remote: &NoteSummary) -> Result<bool, CliError> {
+        contains_fresh_summary(remote)
+    }
+}
+
 pub fn cache_path() -> Result<PathBuf, CliError> {
     let base = dirs::cache_dir()
         .ok_or_else(|| CliError::general("could not determine the OS cache directory"))?;

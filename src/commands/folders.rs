@@ -1,4 +1,6 @@
-use crate::api::{resolve_api_key, validate_page_size, GranolaClient, ListFoldersParams};
+use crate::api::{
+    resolve_api_key, validate_page_size, GranolaApi, GranolaClient, ListFoldersParams,
+};
 use crate::error::CliError;
 use crate::output::{print_json, print_rows, OutputOptions};
 use crate::types::Folder;
@@ -48,19 +50,19 @@ pub async fn handle(
     api_key_override: Option<String>,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
+    let api_key = resolve_api_key(api_key_override)?;
+    let client = GranolaClient::new(api_key)?;
     match command.command {
-        FoldersSubcommand::List(command) => list_folders(command, api_key_override, output).await,
-        FoldersSubcommand::Tree(command) => tree_folders(command, api_key_override, output).await,
+        FoldersSubcommand::List(command) => list_folders(&client, command, output).await,
+        FoldersSubcommand::Tree(command) => tree_folders(&client, command, output).await,
     }
 }
 
 async fn tree_folders(
+    client: &impl GranolaApi,
     command: TreeFoldersCommand,
-    api_key_override: Option<String>,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
-    let api_key = resolve_api_key(api_key_override)?;
-    let client = GranolaClient::new(api_key)?;
     let page_size = validate_page_size(command.page_size)?;
     let mut params = ListFoldersParams {
         cursor: None,
@@ -88,15 +90,45 @@ async fn tree_folders(
 }
 
 async fn list_folders(
+    client: &impl GranolaApi,
     command: ListFoldersCommand,
-    api_key_override: Option<String>,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
-    let api_key = resolve_api_key(api_key_override)?;
-    let client = GranolaClient::new(api_key)?;
+    let result = collect_list_folders(client, &command).await?;
+
+    if output.is_json() {
+        let count = result.folders.len();
+        return print_json(
+            &json!({
+                "folders": result.folders,
+                "count": count,
+                "has_more": result.has_more,
+                "cursor": result.cursor,
+                "page_size": result.page_size,
+            }),
+            output,
+        );
+    }
+
+    print_folder_table(&result.folders, output);
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct ListFoldersResult {
+    folders: Vec<Folder>,
+    has_more: bool,
+    cursor: Option<String>,
+    page_size: u8,
+}
+
+async fn collect_list_folders(
+    client: &impl GranolaApi,
+    command: &ListFoldersCommand,
+) -> Result<ListFoldersResult, CliError> {
     let page_size = validate_page_size(command.page_size)?;
     let mut params = ListFoldersParams {
-        cursor: command.cursor,
+        cursor: command.cursor.clone(),
         page_size: Some(page_size),
     };
     let mut folders = Vec::new();
@@ -123,21 +155,12 @@ async fn list_folders(
         params.cursor = Some(cursor);
     };
 
-    if output.is_json() {
-        return print_json(
-            &json!({
-                "folders": folders,
-                "count": folders.len(),
-                "has_more": has_more,
-                "cursor": next_cursor,
-                "page_size": page_size,
-            }),
-            output,
-        );
-    }
-
-    print_folder_table(&folders, output);
-    Ok(())
+    Ok(ListFoldersResult {
+        folders,
+        has_more,
+        cursor: next_cursor,
+        page_size,
+    })
 }
 
 struct FolderRow<'a> {
@@ -242,5 +265,121 @@ fn print_folder_children(
         println!("{prefix}{connector}{}", folder.name);
         let child_prefix = format!("{prefix}{}", if last { "    " } else { "│   " });
         print_folder_children(Some(&folder.id), children, &child_prefix);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::ListNotesParams;
+    use crate::types::{ListFoldersResponse, ListNotesResponse, Note};
+    use std::collections::VecDeque;
+    use std::sync::Mutex;
+
+    #[test]
+    fn builds_folder_paths_from_parent_links() {
+        let folders = vec![
+            folder("fol_parent", "Parent", None),
+            folder("fol_child", "Child", Some("fol_parent")),
+        ];
+
+        let tree = folder_tree(&folders);
+
+        assert_eq!(tree[0]["path"], "Parent");
+        assert_eq!(tree[1]["path"], "Parent/Child");
+    }
+
+    #[tokio::test]
+    async fn collect_list_folders_uses_injected_api_for_paging_and_limit() {
+        let api = FakeApi::with_folder_pages(vec![
+            ListFoldersResponse {
+                folders: vec![folder("fol_a", "A", None), folder("fol_b", "B", None)],
+                has_more: true,
+                cursor: Some("cursor-1".to_string()),
+            },
+            ListFoldersResponse {
+                folders: vec![folder("fol_c", "C", None), folder("fol_d", "D", None)],
+                has_more: true,
+                cursor: Some("cursor-2".to_string()),
+            },
+        ]);
+        let command = ListFoldersCommand {
+            cursor: None,
+            page_size: 2,
+            all: true,
+            limit: Some(3),
+        };
+
+        let result = collect_list_folders(&api, &command).await.unwrap();
+
+        assert_eq!(
+            result
+                .folders
+                .iter()
+                .map(|folder| folder.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["fol_a", "fol_b", "fol_c"]
+        );
+        assert!(result.has_more);
+        assert_eq!(result.cursor.as_deref(), Some("cursor-2"));
+        assert_eq!(result.page_size, 2);
+
+        let params = api.list_folder_params.lock().unwrap();
+        assert_eq!(params.len(), 2);
+        assert_eq!(params[0].cursor.as_deref(), None);
+        assert_eq!(params[1].cursor.as_deref(), Some("cursor-1"));
+    }
+
+    fn folder(id: &str, name: &str, parent_folder_id: Option<&str>) -> Folder {
+        Folder {
+            id: id.to_string(),
+            object: "folder".to_string(),
+            name: name.to_string(),
+            parent_folder_id: parent_folder_id.map(str::to_string),
+        }
+    }
+
+    #[derive(Default)]
+    struct FakeApi {
+        folder_pages: Mutex<VecDeque<ListFoldersResponse>>,
+        list_folder_params: Mutex<Vec<ListFoldersParams>>,
+    }
+
+    impl FakeApi {
+        fn with_folder_pages(pages: Vec<ListFoldersResponse>) -> Self {
+            Self {
+                folder_pages: Mutex::new(pages.into()),
+                list_folder_params: Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    impl GranolaApi for FakeApi {
+        async fn list_notes(
+            &self,
+            _params: &ListNotesParams,
+        ) -> Result<ListNotesResponse, CliError> {
+            Err(CliError::general("unexpected list_notes call"))
+        }
+
+        async fn get_note(
+            &self,
+            _note_id: &str,
+            _include_transcript: bool,
+        ) -> Result<Note, CliError> {
+            Err(CliError::general("unexpected get_note call"))
+        }
+
+        async fn list_folders(
+            &self,
+            params: &ListFoldersParams,
+        ) -> Result<ListFoldersResponse, CliError> {
+            self.list_folder_params.lock().unwrap().push(params.clone());
+            self.folder_pages
+                .lock()
+                .unwrap()
+                .pop_front()
+                .ok_or_else(|| CliError::general("unexpected list_folders call"))
+        }
     }
 }
