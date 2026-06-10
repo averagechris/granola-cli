@@ -19,8 +19,9 @@ granola notes list --since 7d --sort updated-at --order desc
 granola recent
 granola last --include-transcript
 
-# Get a note, including transcript, as compact JSON.
+# Get a note by ID or copied Granola URL, including transcript, as compact JSON.
 granola notes get not_1d3tmYTlCICgjy --include transcript --output json-compact
+granola show https://app.granola.ai/notes/not_1d3tmYTlCICgjy
 
 # Hydrate many notes into full note records for agents.
 granola notes hydrate --since 7d --include-transcript --jsonl
@@ -96,13 +97,13 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola auth status [--validate]`
 - `granola api get /v1/notes --query page_size=5`
 - `granola notes list [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--no-truncate]`
-- `granola notes get NOTE_ID [--include transcript]`
-- `granola notes hydrate [NOTE_ID ... | --ids-file FILE | --stdin | list filters] [--include-transcript] [--jsonl]`
-- `granola notes open NOTE_ID [--print]`
+- `granola notes get NOTE_ID_OR_URL [--include transcript]`
+- `granola notes hydrate [NOTE_ID_OR_URL ... | --ids-file FILE | --stdin | list filters] [--include-transcript] [--jsonl]`
+- `granola notes open NOTE_ID_OR_URL [--print]`
 - `granola folders list [--cursor CURSOR] [--page-size N] [--all] [--limit N]`
 - `granola folders tree`
 - `granola recent|today|yesterday|last|search|show|open`
-- `granola export note NOTE_ID [--format markdown|json|txt|transcript] [--include-transcript] [--frontmatter] [-o FILE] [--force|--skip-existing]`
+- `granola export note NOTE_ID_OR_URL [--format markdown|json|txt|transcript] [--include-transcript] [--frontmatter] [-o FILE] [--force|--skip-existing]`
 - `granola export notes [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--format jsonl|markdown|json] [-o FILE | --output-dir DIR] [--include-transcript] [--frontmatter] [--only-changed] [--force|--skip-existing]`
 - `granola sync [--since 30d] [--all] [--include-transcripts] [--replace]`
 - `granola cache status|clear`

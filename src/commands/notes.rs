@@ -4,6 +4,7 @@ use crate::api::{
 };
 use crate::cache::{self, CacheStore};
 use crate::error::CliError;
+use crate::note_ref::normalize_note_id;
 use crate::output::{print_json, print_rows, OutputOptions};
 use crate::types::{Note, NoteSummary};
 use chrono::{Duration, SecondsFormat, Utc};
@@ -379,7 +380,7 @@ async fn hydrate_note_ids(
     client: &impl GranolaApi,
     command: &HydrateNotesCommand,
 ) -> Result<Vec<String>, CliError> {
-    let mut ids = command.note_ids.clone();
+    let mut ids = normalize_note_refs(&command.note_ids)?;
 
     if let Some(path) = &command.ids_file {
         let content = fs::read_to_string(path).map_err(|error| {
@@ -388,7 +389,11 @@ async fn hydrate_note_ids(
                 path.display()
             ))
         })?;
-        ids.extend(parse_ids(&content));
+        ids.extend(
+            parse_ids(&content)
+                .map(|id| normalize_note_id(&id))
+                .collect::<Result<Vec<_>, _>>()?,
+        );
     }
 
     if command.stdin {
@@ -396,7 +401,11 @@ async fn hydrate_note_ids(
         io::stdin().read_to_string(&mut content).map_err(|error| {
             CliError::general(format!("failed to read IDs from stdin: {error}"))
         })?;
-        ids.extend(parse_ids(&content));
+        ids.extend(
+            parse_ids(&content)
+                .map(|id| normalize_note_id(&id))
+                .collect::<Result<Vec<_>, _>>()?,
+        );
     }
 
     ids.sort();
@@ -473,6 +482,13 @@ fn parse_ids(content: &str) -> impl Iterator<Item = String> + '_ {
     })
 }
 
+fn normalize_note_refs(inputs: &[String]) -> Result<Vec<String>, CliError> {
+    inputs
+        .iter()
+        .map(|input| normalize_note_id(input))
+        .collect()
+}
+
 fn command_has_selection_filters(command: &HydrateNotesCommand) -> bool {
     command.created_before.is_some()
         || command.created_after.is_some()
@@ -492,9 +508,8 @@ async fn get_note(
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let include_transcript = command.include.as_deref() == Some("transcript");
-    let note = client
-        .get_note(&command.note_id, include_transcript)
-        .await?;
+    let note_id = normalize_note_id(&command.note_id)?;
+    let note = client.get_note(&note_id, include_transcript).await?;
     cache_notes_if_enabled(
         cache_store,
         std::slice::from_ref(&note),
@@ -516,7 +531,8 @@ async fn open_note(
     write_through_cache: bool,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
-    let note = client.get_note(&command.note_id, false).await?;
+    let note_id = normalize_note_id(&command.note_id)?;
+    let note = client.get_note(&note_id, false).await?;
     cache_notes_if_enabled(
         cache_store,
         std::slice::from_ref(&note),

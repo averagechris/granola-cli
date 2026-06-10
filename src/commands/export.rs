@@ -1,5 +1,6 @@
 use crate::api::{resolve_api_key, validate_page_size, GranolaClient, ListNotesParams};
 use crate::error::CliError;
+use crate::note_ref::normalize_note_id;
 use crate::output::{print_json, OutputOptions};
 use crate::types::{Note, NoteSummary, TranscriptItem};
 use chrono::{Duration, SecondsFormat, Utc};
@@ -176,9 +177,8 @@ async fn export_note(
             command.format,
             NoteExportFormat::Transcript | NoteExportFormat::Json
         );
-    let note = client
-        .get_note(&command.note_id, include_transcript)
-        .await?;
+    let note_id = normalize_note_id(&command.note_id)?;
+    let note = client.get_note(&note_id, include_transcript).await?;
     let content = match command.format {
         NoteExportFormat::Markdown => {
             render_note_markdown(&note, command.include_transcript, command.frontmatter)

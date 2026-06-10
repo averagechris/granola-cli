@@ -44,12 +44,14 @@ granola notes list \
   [--order asc|desc] \
   [--no-truncate]
 
-granola notes get NOTE_ID [--include transcript]
-granola notes hydrate [NOTE_ID ...] [--ids-file FILE] [--stdin] [--include-transcript] [--jsonl]
+granola notes get NOTE_ID_OR_URL [--include transcript]
+granola notes hydrate [NOTE_ID_OR_URL ...] [--ids-file FILE] [--stdin] [--include-transcript] [--jsonl]
 granola notes hydrate [list filters] [--include-transcript] [--jsonl]
 granola notes search [--stdin] [QUERY ...] [--limit N]
-granola notes open NOTE_ID [--print]
+granola notes open NOTE_ID_OR_URL [--print]
 ```
+
+Any argument named `NOTE_ID_OR_URL` accepts either a raw Granola note ID like `not_...` or a copied Granola note URL containing that ID.
 
 Search uses the local SQLite FTS index. Query examples:
 
@@ -75,14 +77,14 @@ granola today
 granola yesterday
 granola last [--include-transcript]
 granola search [--stdin] [QUERY ...]
-granola show NOTE_ID
-granola open NOTE_ID
+granola show NOTE_ID_OR_URL
+granola open NOTE_ID_OR_URL
 ```
 
 ## Export
 
 ```bash
-granola export note NOTE_ID \
+granola export note NOTE_ID_OR_URL \
   [--format markdown|json|txt|transcript] \
   [--include-transcript] \
   [--frontmatter] \

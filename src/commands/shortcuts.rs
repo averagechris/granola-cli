@@ -1,6 +1,7 @@
 use crate::api::{resolve_api_key, try_resolve_api_key, GranolaClient, ListNotesParams};
 use crate::cache;
 use crate::error::CliError;
+use crate::note_ref::normalize_note_id;
 use crate::output::{print_json, print_rows, OutputOptions};
 use crate::types::{Note, NoteSummary};
 use chrono::{Duration, SecondsFormat, Utc};
@@ -101,6 +102,7 @@ pub async fn show(
 ) -> Result<(), CliError> {
     let api_key = resolve_api_key(api_key_override)?;
     let client = GranolaClient::new(api_key)?;
+    let note_id = normalize_note_id(&note_id)?;
     let note = client.get_note(&note_id, false).await?;
     cache_notes_if_enabled(std::slice::from_ref(&note), write_through_cache)?;
     if output.is_json() {
@@ -118,6 +120,7 @@ pub async fn open(
 ) -> Result<(), CliError> {
     let api_key = resolve_api_key(api_key_override)?;
     let client = GranolaClient::new(api_key)?;
+    let note_id = normalize_note_id(&note_id)?;
     let note = client.get_note(&note_id, false).await?;
     cache_notes_if_enabled(std::slice::from_ref(&note), write_through_cache)?;
     open::that(&note.web_url)

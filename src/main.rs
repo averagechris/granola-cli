@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod error;
 mod keyring;
+mod note_ref;
 mod output;
 mod types;
 
