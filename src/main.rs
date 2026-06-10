@@ -99,6 +99,8 @@ enum Command {
     Cache(commands::cache::CacheCommand),
     /// Manage non-secret CLI defaults and profiles.
     Config(commands::config::ConfigCommand),
+    /// Save and run named note views.
+    Views(commands::views::ViewsCommand),
     /// Print agent-focused usage guidance.
     Agent,
     /// Generate shell completion scripts.
@@ -201,6 +203,7 @@ async fn run(
         Command::Sync(command) => commands::sync::handle(command, api_key_override, output).await,
         Command::Cache(command) => commands::cache::handle(command, output),
         Command::Config(command) => commands::config::handle(command, output),
+        Command::Views(command) => commands::views::handle(command, api_key_override, output).await,
         Command::Agent => commands::agent(output),
         Command::Completions { shell, command } => handle_completions(shell, command),
         Command::Doctor(command) => commands::doctor(command, api_key_override, output).await,

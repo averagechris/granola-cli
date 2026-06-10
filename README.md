@@ -37,6 +37,11 @@ granola folders tree
 # Agent-friendly JSON with field projection.
 granola notes list --output json-compact --fields notes.id,notes.title,notes.owner.email,count,has_more,cursor
 
+# Save reusable local search or API-backed note views.
+granola views create customer-calls --folder-id fol_123 --since 30d --all
+granola views create renewal-search --query 'transcript:renewal' --limit 20
+granola views run customer-calls
+
 # Print the machine-readable integration contract for coding agents.
 granola agent --output json-compact
 
@@ -107,6 +112,7 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola export notes [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--format jsonl|markdown|json] [-o FILE | --output-dir DIR] [--include-transcript] [--frontmatter] [--only-changed] [--force|--skip-existing]`
 - `granola sync [--since 30d] [--all] [--include-transcripts] [--replace]`
 - `granola cache status|clear`
+- `granola views create|list|show|delete|run`
 - `granola config show|path|set KEY VALUE`
 - `granola completions zsh|bash|fish|powershell|elvish`
 - `granola completions install zsh|bash|fish|powershell|elvish`

@@ -112,6 +112,11 @@ granola export notes \
 granola sync [--since 30d] [--all] [--include-transcripts] [--replace]
 granola cache status
 granola cache clear
+granola views create NAME [--query QUERY | list filters] [--limit N] [--all]
+granola views list
+granola views show NAME
+granola views run NAME
+granola views delete NAME
 granola config show
 granola config path
 granola config set output json

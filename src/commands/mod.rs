@@ -7,6 +7,7 @@ pub mod folders;
 pub mod notes;
 pub mod shortcuts;
 pub mod sync;
+pub mod views;
 
 use crate::api::{resolve_api_key, GranolaClient, ListNotesParams};
 use crate::error::CliError;

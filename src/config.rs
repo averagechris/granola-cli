@@ -11,12 +11,40 @@ pub struct UserConfig {
     pub defaults: ConfigProfile,
     #[serde(default)]
     pub profiles: BTreeMap<String, ConfigProfile>,
+    #[serde(default)]
+    pub views: BTreeMap<String, SavedView>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ConfigProfile {
     pub output: Option<String>,
     pub quiet: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SavedView {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_before: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_after: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub since: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_after: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_since: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub folder_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<usize>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub all: bool,
 }
 
 impl UserConfig {
