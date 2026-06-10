@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.0 - 2026-06-10
+
+### Added
+
+- Top-level `granola --version` output for quick local version checks.
+- `granola doctor` now reports the installed version, checks hosted release metadata for the latest version, and flags when an update is available.
+- Doctor JSON output now includes version-check fields for automation: `latest_version`, `update_available`, `version_check_url`, `version_check_error`, and `version_check_skipped`.
+
 ## v0.4.0 - 2026-06-10
 
 ### Added

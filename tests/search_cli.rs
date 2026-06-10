@@ -9,6 +9,35 @@ use support::{
 };
 
 #[test]
+fn top_level_version_flag_prints_package_version() {
+    let home = temp_home_with_cache();
+
+    granola(home.path())
+        .arg("--version")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "granola {}",
+            env!("CARGO_PKG_VERSION")
+        )));
+}
+
+#[test]
+fn doctor_human_output_includes_package_version() {
+    let home = temp_home_with_cache();
+
+    granola(home.path())
+        .arg("doctor")
+        .env("GRANOLA_CLI_DISABLE_UPDATE_CHECK", "1")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "version: {}",
+            env!("CARGO_PKG_VERSION")
+        )));
+}
+
+#[test]
 fn top_level_search_accepts_multiple_query_arguments() {
     let home = temp_home_with_cache();
     seed_cache(home.path());

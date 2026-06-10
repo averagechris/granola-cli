@@ -15,6 +15,7 @@ use std::io;
 
 #[derive(Debug, Parser)]
 #[command(name = "granola")]
+#[command(version)]
 #[command(about = "A Rust CLI for Granola meeting notes")]
 struct Cli {
     /// Output format for data commands.

@@ -55,14 +55,10 @@ cat > "${site_dir}/index.html" <<EOF
 
   <h2>What's new in v${version}</h2>
   <ul>
-    <li>Adaptive default output that uses tables when they fit and list-style rows in narrow terminals.</li>
-    <li>Explicit output formats for scripts and agents: <code>table</code>, <code>list</code>, <code>json</code>, <code>json-compact</code>, and <code>json-pretty</code>.</li>
-    <li>Unicode-aware table width calculations and snapshot-tested output formatting.</li>
-    <li>SQLite-backed local cache with FTS5 search and relevance ranking.</li>
-    <li>Field-qualified search queries such as <code>attendees:will "async config"</code> and <code>transcript:renewal</code>.</li>
-    <li>Search queries from multiple CLI args or stdin, for example <code>printf 'transcript:renewal' | granola search</code>.</li>
-    <li>Default write-through cache updates when listing or fetching notes, with <code>--no-cache</code> to opt out.</li>
-    <li>Clearer search output for empty caches, no-match searches, summary-only hits, hydrated hits, and transcript-indexed hits.</li>
+    <li>Top-level <code>granola --version</code> output for quick local version checks.</li>
+    <li><code>granola doctor</code> reports the installed version, latest hosted version, and whether an update is available.</li>
+    <li>Doctor JSON output includes version-check fields for automation and agents.</li>
+    <li>Existing v0.4 improvements remain: adaptive table/list output, explicit JSON formats, SQLite FTS search, and write-through caching.</li>
   </ul>
 
   <h2>Binary downloads</h2>

@@ -14,6 +14,12 @@ use crate::output::{print_json, OutputOptions};
 use clap::Args;
 use serde_json::json;
 use std::io::{self, IsTerminal, Read};
+use std::time::Duration;
+
+const DEFAULT_UPDATE_CHECK_URL: &str =
+    "https://averagechris.srht.site/granola-cli/downloads/manifest.json";
+const UPDATE_CHECK_URL_ENV: &str = "GRANOLA_CLI_UPDATE_CHECK_URL";
+const DISABLE_UPDATE_CHECK_ENV: &str = "GRANOLA_CLI_DISABLE_UPDATE_CHECK";
 
 #[derive(Debug, Args)]
 pub struct DoctorCommand {
@@ -78,11 +84,12 @@ pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
                 "examples": ["granola api get /v1/notes --query page_size=5 --output json-compact"]
             },
             "doctor": {
-                "description": "Inspect local setup without printing secrets.",
+                "description": "Inspect local setup and latest-version availability without printing secrets.",
                 "examples": ["granola doctor --output json-compact"]
             }
         },
         "global_flags": {
+            "--version": "Print CLI version information and exit.",
             "--output json": "Use stable machine-readable output for data commands and JSON error objects on failure.",
             "--output json-compact": "Use stable machine-readable output without JSON whitespace.",
             "--output json-pretty": "Use stable machine-readable output with JSON indentation.",
@@ -191,6 +198,7 @@ pub async fn doctor(
     let auth_resolves = resolved_api_key.is_ok();
     let config_path = crate::config::config_path()?;
     let cache_path = crate::cache::cache_path()?;
+    let version_check = check_latest_version().await;
     let mut api_reachable = None;
     let mut auth_valid = None;
     let mut validation_error = None;
@@ -226,41 +234,71 @@ pub async fn doctor(
 
     let mut next_steps = Vec::new();
     if !auth_resolves {
-        next_steps
-            .push("Run `granola auth login --validate` or pass `--api-key` for one invocation");
+        next_steps.push(
+            "Run `granola auth login --validate` or pass `--api-key` for one invocation"
+                .to_string(),
+        );
     }
     if keyring_error.is_some() && !api_key_override_present {
-        next_steps.push("Check OS keyring permissions or pass `--api-key` for this invocation");
+        next_steps.push(
+            "Check OS keyring permissions or pass `--api-key` for this invocation".to_string(),
+        );
     }
     if auth_valid == Some(false) {
         next_steps.push(
-            "Confirm the API key is active and that your Granola workspace supports API keys",
+            "Confirm the API key is active and that your Granola workspace supports API keys"
+                .to_string(),
         );
     }
     if api_reachable == Some(false) {
-        next_steps.push("Check network connectivity to https://public-api.granola.ai");
+        next_steps.push("Check network connectivity to https://public-api.granola.ai".to_string());
+    }
+    if version_check.update_available == Some(true) {
+        if let Some(latest_version) = &version_check.latest_version {
+            next_steps.push(format!(
+                "Install granola-cli v{latest_version} from SourceHut downloads or update your Nix profile"
+            ));
+        }
     }
 
     let data = json!({
         "version": env!("CARGO_PKG_VERSION"),
+        "latest_version": version_check.latest_version.clone(),
+        "update_available": version_check.update_available,
+        "version_check_url": version_check.url.clone(),
+        "version_check_error": version_check.error.clone(),
+        "version_check_skipped": version_check.skipped,
         "keyring_available": keyring_available,
         "keyring_configured": keyring_configured,
-        "keyring_error": keyring_error,
+        "keyring_error": keyring_error.clone(),
         "api_key_override_present": api_key_override_present,
         "auth_resolves": auth_resolves,
         "validated": command.validate,
         "api_reachable": api_reachable,
         "auth_valid": auth_valid,
-        "validation_error": validation_error,
+        "validation_error": validation_error.clone(),
         "config_path": config_path,
         "cache_path": cache_path,
-        "next_steps": next_steps,
+        "next_steps": next_steps.clone(),
     });
 
     if output.is_json() {
         return print_json(&data, output);
     }
 
+    println!("version: {}", env!("CARGO_PKG_VERSION"));
+    if version_check.skipped {
+        println!("version check: skipped");
+    } else if let Some(latest_version) = version_check.latest_version {
+        println!("latest version: {latest_version}");
+        println!(
+            "update available: {}",
+            version_check.update_available.unwrap_or(false)
+        );
+    } else if let Some(error) = version_check.error {
+        println!("latest version: unknown");
+        println!("version check error: {error}");
+    }
     println!("keyring available: {keyring_available}");
     println!("keyring configured: {keyring_configured}");
     if let Some(error) = keyring_error {
@@ -281,6 +319,145 @@ pub async fn doctor(
         println!("next step: {step}");
     }
     Ok(())
+}
+
+#[derive(Debug)]
+struct VersionCheck {
+    latest_version: Option<String>,
+    update_available: Option<bool>,
+    url: Option<String>,
+    error: Option<String>,
+    skipped: bool,
+}
+
+async fn check_latest_version() -> VersionCheck {
+    if env_truthy(DISABLE_UPDATE_CHECK_ENV) {
+        return VersionCheck {
+            latest_version: None,
+            update_available: None,
+            url: None,
+            error: None,
+            skipped: true,
+        };
+    }
+
+    let url = std::env::var(UPDATE_CHECK_URL_ENV)
+        .unwrap_or_else(|_| DEFAULT_UPDATE_CHECK_URL.to_string());
+    check_latest_version_at(&url).await
+}
+
+async fn check_latest_version_at(url: &str) -> VersionCheck {
+    let result = async {
+        let http = reqwest::Client::builder()
+            .user_agent(format!("granola-cli/{}", env!("CARGO_PKG_VERSION")))
+            .timeout(Duration::from_secs(5))
+            .connect_timeout(Duration::from_secs(3))
+            .build()?;
+        let response = http
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                "application/json, text/html;q=0.9, */*;q=0.8",
+            )
+            .send()
+            .await?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(CliError::general(format!(
+                "update metadata returned HTTP {status}"
+            )));
+        }
+        let body = response.text().await?;
+        latest_version(&body).ok_or_else(|| {
+            CliError::general("update metadata did not include a recognizable version")
+        })
+    }
+    .await;
+
+    match result {
+        Ok(latest_version) => VersionCheck {
+            update_available: Some(
+                compare_versions(&latest_version, env!("CARGO_PKG_VERSION")).is_gt(),
+            ),
+            latest_version: Some(latest_version),
+            url: Some(url.to_string()),
+            error: None,
+            skipped: false,
+        },
+        Err(error) => VersionCheck {
+            latest_version: None,
+            update_available: None,
+            url: Some(url.to_string()),
+            error: Some(error.message),
+            skipped: false,
+        },
+    }
+}
+
+fn latest_version(metadata: &str) -> Option<String> {
+    latest_version_from_json(metadata).or_else(|| latest_version_from_text(metadata))
+}
+
+fn latest_version_from_json(metadata: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(metadata).ok()?;
+    ["latest_version", "version"]
+        .into_iter()
+        .filter_map(|key| value.get(key).and_then(|value| value.as_str()))
+        .filter_map(normalize_version)
+        .max_by(|left, right| compare_versions(left, right))
+}
+
+fn latest_version_from_text(metadata: &str) -> Option<String> {
+    metadata
+        .match_indices('v')
+        .filter_map(|(index, _)| normalize_version(&metadata[index..]))
+        .max_by(|left, right| compare_versions(left, right))
+}
+
+fn normalize_version(raw: &str) -> Option<String> {
+    let raw = raw.trim().trim_start_matches('v');
+    let version: String = raw
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit() || *ch == '.')
+        .collect();
+    let version = version.trim_matches('.');
+    if version.contains('.') && version.chars().any(|ch| ch.is_ascii_digit()) {
+        Some(version.to_string())
+    } else {
+        None
+    }
+}
+
+fn compare_versions(left: &str, right: &str) -> std::cmp::Ordering {
+    let left_parts = version_parts(left);
+    let right_parts = version_parts(right);
+    let length = left_parts.len().max(right_parts.len()).max(3);
+    for index in 0..length {
+        let left_part = left_parts.get(index).copied().unwrap_or_default();
+        let right_part = right_parts.get(index).copied().unwrap_or_default();
+        match left_part.cmp(&right_part) {
+            std::cmp::Ordering::Equal => {}
+            ordering => return ordering,
+        }
+    }
+    std::cmp::Ordering::Equal
+}
+
+fn version_parts(version: &str) -> Vec<u64> {
+    version
+        .trim_start_matches('v')
+        .split('.')
+        .filter_map(|part| part.parse::<u64>().ok())
+        .collect()
+}
+
+fn env_truthy(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
 }
 
 #[cfg(test)]
@@ -319,5 +496,53 @@ mod tests {
     #[test]
     fn rejects_empty_search_query() {
         assert!(resolve_search_query_parts(&[], Some(" \n\t")).is_err());
+    }
+
+    #[test]
+    fn extracts_latest_version_from_hosted_download_page() {
+        let metadata = r#"
+            <h2>What's new in v0.9.9</h2>
+            <p>Current packaged version: <code>v0.10.0</code></p>
+            <a href="downloads/granola-cli-v0.10.0-aarch64-darwin.tar.gz">download</a>
+        "#;
+
+        assert_eq!(latest_version(metadata).as_deref(), Some("0.10.0"));
+    }
+
+    #[test]
+    fn extracts_latest_version_from_json_metadata() {
+        assert_eq!(
+            latest_version(r#"{"version":"0.5.0","latest_version":"0.6.0"}"#).as_deref(),
+            Some("0.6.0")
+        );
+    }
+
+    #[test]
+    fn compares_numeric_versions() {
+        assert!(compare_versions("0.10.0", "0.9.9").is_gt());
+        assert!(compare_versions("0.4.1", "0.4.0").is_gt());
+        assert!(compare_versions("0.4.0", "0.4.0").is_eq());
+    }
+
+    #[tokio::test]
+    async fn checks_latest_version_from_update_url() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/latest.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "version": "999.0.0"
+            })))
+            .mount(&server)
+            .await;
+
+        let check = check_latest_version_at(&format!("{}/latest.json", server.uri())).await;
+
+        assert_eq!(check.latest_version.as_deref(), Some("999.0.0"));
+        assert_eq!(check.update_available, Some(true));
+        assert!(check.error.is_none());
+        assert!(!check.skipped);
     }
 }
