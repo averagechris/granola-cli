@@ -67,7 +67,7 @@ struct ListNotesCommand {
     /// Maximum number of notes to return.
     #[arg(long)]
     limit: Option<usize>,
-    /// Sort returned notes by this field.
+    /// Sort returned notes by this field. Defaults to updated-at.
     #[arg(long, value_enum)]
     sort: Option<NoteSortField>,
     /// Sort order.
@@ -759,7 +759,7 @@ fn display_title(note: &NoteSummary, no_truncate: bool) -> String {
 }
 
 fn sort_notes(notes: &mut [NoteSummary], sort: Option<NoteSortField>, order: SortOrder) {
-    let Some(sort) = sort else { return };
+    let sort = sort.unwrap_or(NoteSortField::UpdatedAt);
     notes.sort_by(|left, right| {
         let ord = match sort {
             NoteSortField::CreatedAt => left.created_at.cmp(&right.created_at),
@@ -852,6 +852,25 @@ mod tests {
         ];
         sort_notes(&mut notes, Some(NoteSortField::Title), SortOrder::Desc);
         assert_eq!(notes[0].id, "not_B");
+    }
+
+    #[test]
+    fn sorts_notes_by_updated_at_descending_by_default() {
+        let mut notes = vec![
+            note_summary("not_old", "Old", "2026-01-01"),
+            note_summary("not_new", "New", "2026-01-03"),
+            note_summary("not_middle", "Middle", "2026-01-02"),
+        ];
+
+        sort_notes(&mut notes, None, SortOrder::Desc);
+
+        assert_eq!(
+            notes
+                .iter()
+                .map(|note| note.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["not_new", "not_middle", "not_old"]
+        );
     }
 
     #[test]

@@ -303,7 +303,7 @@ fn search_in_conn(
          JOIN note_summaries s ON s.id = note_search.note_id \
          LEFT JOIN notes n ON n.id = s.id \
          WHERE note_search MATCH ?1 \
-         ORDER BY rank \
+         ORDER BY rank, s.updated_at DESC, s.created_at DESC \
          LIMIT {}",
         limit.unwrap_or(100)
     );
@@ -969,6 +969,32 @@ mod tests {
         let hits = search_in_conn(&conn, "mint", Some(1)).unwrap().unwrap();
 
         assert_eq!(hits.len(), 1);
+    }
+
+    #[test]
+    fn sqlite_fts_tiebreaks_search_results_by_most_recent_update() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        let mut old_note: Note =
+            serde_json::from_str(include_str!("../tests/fixtures/get_note.json")).unwrap();
+        old_note.id = "not_old".to_string();
+        old_note.summary_text = "mint planning".to_string();
+        old_note.created_at = "2026-01-01T00:00:00Z".to_string();
+        old_note.updated_at = "2026-01-01T00:00:00Z".to_string();
+        let mut new_note = old_note.clone();
+        new_note.id = "not_new".to_string();
+        new_note.created_at = "2026-01-02T00:00:00Z".to_string();
+        new_note.updated_at = "2026-01-03T00:00:00Z".to_string();
+
+        upsert_notes_in_conn(&mut conn, &[old_note, new_note]).unwrap();
+        let hits = search_in_conn(&conn, "mint", None).unwrap().unwrap();
+
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.summary.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["not_new", "not_old"]
+        );
     }
 
     #[test]

@@ -18,6 +18,6 @@ Design constraints:
 - Pass `--replace` when you want the cache to contain only the current sync result.
 - List-style commands cache searchable note summaries; get/hydrate/sync-style commands cache full note details.
 - Pass global `--no-cache` to disable write-through cache updates for an invocation.
-- Search uses SQLite FTS5 over note IDs, titles, owners, summaries, attendees, folders, and cached transcript text.
+- Search uses SQLite FTS5 over note IDs, titles, owners, summaries, attendees, folders, and cached transcript text. Results are ranked by match quality with most-recently-updated notes first when ranks tie.
 - FTS field filters are supported, including `title:`, `owner:`, `attendees:`, `folders:`, `summary_text:`, `summary_markdown:`, and `transcript:`.
 - Phrase queries work with quoted terms, for example `granola search attendees:will "async config"`.

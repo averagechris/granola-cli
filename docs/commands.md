@@ -62,6 +62,8 @@ granola notes search transcript:renewal
 printf 'attendees:will "async config"' | granola notes search
 ```
 
+List output defaults to most-recently-updated notes first. Search ranks matches first and uses most-recently-updated notes as the tie-breaker.
+
 ## Folders
 
 ```bash
