@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.1 - 2026-06-10
+
+### Fixed
+
+- `granola notes list` now defaults to most-recently-updated notes first.
+- Local note search now keeps FTS relevance first and uses most-recently-updated notes as the tie-breaker.
+- Table output now aligns rows containing emoji variation sequences such as `⚔️`.
+
 ## v0.6.0 - 2026-06-10
 
 ### Added

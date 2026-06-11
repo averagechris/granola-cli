@@ -55,11 +55,9 @@ cat > "${site_dir}/index.html" <<EOF
 
   <h2>What's new in v${version}</h2>
   <ul>
-    <li>Use copied Granola note URLs anywhere a raw <code>not_...</code> note ID is accepted.</li>
-    <li>Save and rerun reusable selectors with <code>granola views create|list|show|run|delete</code>.</li>
-    <li>Prepare meeting reviews and agent handoffs with <code>granola digest</code> and <code>granola context</code>.</li>
-    <li>Redact sensitive note output with <code>--redact emails,phones,secrets,attendees</code>.</li>
-    <li>Poll for updates with <code>granola watch</code> and maintain local data with expanded <code>granola cache</code> utilities.</li>
+    <li>List notes in most-recently-updated order by default.</li>
+    <li>Keep search relevance ordering while preferring recently updated notes when ranks tie.</li>
+    <li>Align table output correctly for emoji variation sequences such as <code>⚔️</code>.</li>
   </ul>
 
   <h2>Binary downloads</h2>
