@@ -215,16 +215,44 @@ fn print_table_with_widths(headers: &[&str], rows: &[Vec<String>], widths: &[usi
 }
 
 fn table_widths(headers: &[&str], rows: &[Vec<String>]) -> Vec<usize> {
-    let mut widths: Vec<usize> = headers
-        .iter()
-        .map(|header| UnicodeWidthStr::width(*header))
-        .collect();
+    let mut widths: Vec<usize> = headers.iter().map(|header| display_width(header)).collect();
     for row in rows {
         for (index, cell) in row.iter().enumerate() {
-            widths[index] = widths[index].max(UnicodeWidthStr::width(cell.as_str()));
+            widths[index] = widths[index].max(display_width(cell.as_str()));
         }
     }
     widths
+}
+
+fn display_width(text: &str) -> usize {
+    let width = UnicodeWidthStr::width(text);
+    width + emoji_variation_width_adjustment(text)
+}
+
+fn emoji_variation_width_adjustment(text: &str) -> usize {
+    let mut extra_width = 0;
+    let mut previous = None;
+
+    for character in text.chars() {
+        if character == '\u{fe0f}' {
+            if let Some(previous) = previous {
+                extra_width += emoji_variation_extra_width(previous);
+            }
+        } else {
+            previous = Some(character);
+        }
+    }
+
+    extra_width
+}
+
+fn emoji_variation_extra_width(base: char) -> usize {
+    let base = base.to_string();
+    let emoji = format!("{base}\u{fe0f}");
+    let base_width = UnicodeWidthStr::width(base.as_str());
+    let emoji_width = UnicodeWidthStr::width(emoji.as_str());
+
+    usize::from(base_width == 1 && emoji_width == base_width)
 }
 
 fn table_width(widths: &[usize]) -> usize {
@@ -254,7 +282,7 @@ fn print_table_line(widths: &[usize]) {
 fn print_table_row<'a>(cells: impl IntoIterator<Item = &'a str>, widths: &[usize]) {
     print!("|");
     for (cell, width) in cells.into_iter().zip(widths) {
-        let padding = width.saturating_sub(UnicodeWidthStr::width(cell));
+        let padding = width.saturating_sub(display_width(cell));
         print!(" {cell}{} |", " ".repeat(padding));
     }
     println!();
@@ -331,5 +359,18 @@ mod tests {
 
         assert_eq!(widths, vec![7, 11]);
         assert_eq!(table_width(&widths), 25);
+    }
+
+    #[test]
+    fn calculates_table_width_with_emoji_variation_selectors() {
+        let rows = vec![vec![
+            "not_123".to_string(),
+            "Engineering Guild ⚔️".to_string(),
+        ]];
+        let widths = table_widths(&["id", "title"], &rows);
+
+        assert_eq!(display_width("⚔️"), 2);
+        assert_eq!(widths, vec![7, 20]);
+        assert_eq!(table_width(&widths), 34);
     }
 }
