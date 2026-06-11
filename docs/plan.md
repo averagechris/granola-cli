@@ -18,7 +18,7 @@ This is an execution checklist, not a phase plan.
   - `granola notes get NOTE_ID`
   - filters: `--created-before`, `--created-after`, `--updated-after`, `--folder-id`
   - pagination: `--page-size`, `--cursor`, `--all`, `--limit`
-  - detail flag: `--include transcript`
+  - detail flag: `--include-transcript`
 - [x] Implement folder commands:
   - `granola folders list`
   - pagination: `--page-size`, `--cursor`, `--all`, `--limit`
@@ -26,7 +26,7 @@ This is an execution checklist, not a phase plan.
 - [ ] Add non-secret config metadata only when there is real metadata to persist.
 - [x] Add proactive client-side sustained rate limiting beyond 429 error mapping.
 - [x] Implement export commands:
-  - `granola export note NOTE_ID --format markdown|json|txt`
+  - `granola export note NOTE_ID --format markdown|json|text`
   - `granola export notes --created-after ... --format jsonl|markdown`
   - safe file writes via temp file then atomic rename
 - [x] Implement command ergonomics:

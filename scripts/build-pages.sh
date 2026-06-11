@@ -55,9 +55,11 @@ cat > "${site_dir}/index.html" <<EOF
 
   <h2>What's new in v${version}</h2>
   <ul>
-    <li>List notes in most-recently-updated order by default.</li>
-    <li>Keep search relevance ordering while preferring recently updated notes when ranks tie.</li>
-    <li>Align table output correctly for emoji variation sequences such as <code>⚔️</code>.</li>
+    <li>Read complete full-note results from the local cache before hitting the API.</li>
+    <li>Standardize note commands around <code>notes get</code>, <code>notes get-many</code>, <code>notes search</code>, and <code>notes open</code>.</li>
+    <li>Use <code>--include-transcript</code> consistently across note retrieval, sync, export, context, and shortcuts.</li>
+    <li>Require explicit note selectors for batch full-note commands to avoid surprising first-page results.</li>
+    <li>Clarify that <code>notes search</code> searches the local cache, not a remote API search endpoint.</li>
   </ul>
 
   <h2>Binary downloads</h2>

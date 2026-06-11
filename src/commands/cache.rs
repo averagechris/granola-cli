@@ -152,7 +152,7 @@ fn export(command: CacheExportCommand, _output: &OutputOptions) -> Result<(), Cl
     let content = match command.format {
         CacheExportFormat::Jsonl => cache::export_jsonl()?.ok_or_else(|| {
             CliError::invalid_input(
-                "no local cache found; run `granola sync --since 30d --all` first",
+                "no local cache found; run `granola sync --since 30d --all --include-transcript` first",
             )
         })?,
     };

@@ -29,4 +29,4 @@ granola views list
 granola views run renewal-search --output json-compact
 ```
 
-Search views require a populated cache. Run `granola sync --since 30d --all --include-transcripts` first when using transcript searches.
+Search views require a populated cache. Run `granola sync --since 30d --all --include-transcript` first when using transcript searches.

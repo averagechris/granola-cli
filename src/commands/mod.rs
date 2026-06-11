@@ -43,15 +43,15 @@ pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
                 "examples": ["granola auth login --key-stdin --validate", "granola auth status --validate --output json-compact", "granola auth logout --force"]
             },
             "notes": {
-                "description": "List note metadata, fetch one note, hydrate batches, or open the Granola web URL.",
+                "description": "List note metadata, get one or many full notes, search the cache, or open the Granola web URL.",
                 "examples": [
                     "granola notes list --since 7d --sort updated-at --order desc --output json-compact",
-                    "granola notes get NOTE_ID --include transcript --output json-compact",
-                    "granola notes hydrate --since 7d --include-transcript --jsonl"
+                    "granola notes get NOTE_ID_OR_URL --include-transcript --output json-compact",
+                    "granola notes get-many --since 7d --include-transcript --jsonl"
                 ],
                 "json_shapes": {
                     "list": { "notes": [], "count": 0, "has_more": false, "cursor": null, "page_size": 10 },
-                    "hydrate": { "notes": [], "count": 0 }
+                    "get_many": { "notes": [], "count": 0 }
                 }
             },
             "folders": {
@@ -69,7 +69,7 @@ pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
             },
             "sync": {
                 "description": "Fetch note data into a simple non-secret local cache for repeated search workflows.",
-                "examples": ["granola sync --since 30d --all --include-transcripts --output json-compact"]
+                "examples": ["granola sync --since 30d --all --include-transcript --output json-compact"]
             },
             "cache": {
                 "description": "Inspect or clear the local non-secret note cache.",
@@ -81,7 +81,7 @@ pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
             },
             "shortcuts": {
                 "description": "Terse aliases for common human workflows.",
-                "examples": ["granola recent", "granola today", "granola last --include-transcript", "granola search pricing", "granola show NOTE_ID", "granola open NOTE_ID"]
+                "examples": ["granola recent", "granola today", "granola last --include-transcript"]
             },
             "api": {
                 "description": "Guarded GET access to documented /v1/... endpoints for debugging.",
@@ -108,8 +108,8 @@ pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
         "recipes": [
             { "name": "check auth", "command": "granola auth status --validate --output json-compact" },
             { "name": "recent metadata", "command": "granola notes list --since 7d --sort updated-at --order desc --output json-compact" },
-            { "name": "full recent notes", "command": "granola notes hydrate --since 7d --include-transcript --jsonl" },
-            { "name": "cache and search", "command": "granola sync --since 30d --all --include-transcripts && granola notes search pricing --output json-compact" },
+            { "name": "full recent notes", "command": "granola notes get-many --since 7d --include-transcript --jsonl" },
+            { "name": "cache and search", "command": "granola sync --since 30d --all --include-transcript && granola notes search pricing --output json-compact" },
             { "name": "agent profile", "command": "granola config set profile.agent.output json-compact" },
             { "name": "small payload", "command": "granola notes list --output json-compact --fields notes.id,notes.title,notes.owner.email,count,has_more,cursor" }
         ],
@@ -133,10 +133,10 @@ pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
         "- Use `granola notes list --output json-compact` for paginated note metadata envelopes."
     );
     println!(
-        "- Use `granola notes get NOTE_ID --include transcript --output json` for full note data."
+        "- Use `granola notes get NOTE_ID_OR_URL --include-transcript --output json` for full note data."
     );
-    println!("- Use `granola notes hydrate --since 7d --include-transcript --jsonl` for efficient batch hydration.");
-    println!("- Use `granola sync --since 30d --all --include-transcripts` plus `granola notes search QUERY` for repeated local searches.");
+    println!("- Use `granola notes get-many --since 7d --include-transcript --jsonl` for efficient batch note retrieval.");
+    println!("- Use `granola sync --since 30d --all --include-transcript` plus `granola notes search QUERY` for repeated local cache searches.");
     println!("- Use `granola config set profile.agent.output json-compact` and `--profile agent` for non-secret defaults.");
     println!("- Use `granola export note NOTE_ID --format markdown` for portable note output.");
     println!("- Use `--output list` for a narrow-terminal human-readable format.");

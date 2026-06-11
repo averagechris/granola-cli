@@ -27,9 +27,10 @@ enum NotesSubcommand {
     List(ListNotesCommand),
     /// Retrieve one note by ID.
     Get(GetNoteCommand),
-    /// Fetch full note records for IDs or list filters.
-    Hydrate(HydrateNotesCommand),
-    /// Search locally synced notes.
+    /// Retrieve many full note records for IDs or list filters.
+    #[command(name = "get-many")]
+    GetMany(GetManyNotesCommand),
+    /// Search the local note cache, not the Granola API.
     Search(SearchNotesCommand),
     /// Open a note in the browser.
     Open(OpenNoteCommand),
@@ -93,27 +94,29 @@ enum SortOrder {
 
 #[derive(Debug, Args)]
 struct GetNoteCommand {
-    /// Granola note ID, e.g. not_1d3tmYTlCICgjy.
+    /// Granola note ID or copied Granola note URL.
+    #[arg(value_name = "NOTE_ID_OR_URL")]
     note_id: String,
     /// Include the transcript in the response.
-    #[arg(long, value_parser = ["transcript"])]
-    include: Option<String>,
+    #[arg(long)]
+    include_transcript: bool,
     /// Redact sensitive data in output. Repeat or comma-separate values: emails, phones, secrets, attendees.
     #[arg(long, value_enum, value_delimiter = ',')]
     redact: Vec<RedactionKind>,
 }
 
 #[derive(Debug, Args)]
-struct HydrateNotesCommand {
-    /// Note IDs to fetch. If omitted, list filters select notes to hydrate.
+struct GetManyNotesCommand {
+    /// Note IDs or copied Granola note URLs. If omitted, pass a list filter or --all.
+    #[arg(value_name = "NOTE_ID_OR_URL")]
     note_ids: Vec<String>,
-    /// Read one note ID per line from this file.
+    /// Read one note ID or URL per line from this file.
     #[arg(long)]
-    ids_file: Option<PathBuf>,
-    /// Read one note ID per line from stdin.
+    notes_file: Option<PathBuf>,
+    /// Read one note ID or URL per line from stdin.
     #[arg(long)]
     stdin: bool,
-    /// Include transcripts in hydrated notes.
+    /// Include transcripts in returned notes.
     #[arg(long)]
     include_transcript: bool,
     /// Emit newline-delimited JSON, one note per line.
@@ -149,14 +152,16 @@ struct HydrateNotesCommand {
     /// Fetch all pages when selecting by filters.
     #[arg(long)]
     all: bool,
-    /// Maximum number of notes to hydrate.
+    /// Maximum number of notes to return.
     #[arg(long)]
     limit: Option<usize>,
 }
 
 #[derive(Debug, Args)]
 #[command(
-    long_about = "Search the local SQLite FTS index. Supports SQLite FTS5 syntax such as field filters and phrases. Examples: `granola notes search apple`, `granola notes search attendees:will async config`, `granola notes search attendees:will \"async config\"`, `granola notes search transcript:renewal`."
+    about = "Search the local note cache, not the Granola API.",
+    long_about = "Search the local SQLite cache, not the Granola API. Run `granola sync --since 30d --all --include-transcript` first, especially for transcript search. Supports SQLite FTS5 syntax such as field filters and phrases. Examples: `granola notes search apple`, `granola notes search attendees:will async config`, `granola notes search attendees:will \"async config\"`, `granola notes search transcript:renewal`.",
+    after_help = "Tip: run `granola sync --since 30d --all --include-transcript` first. Transcript search only covers notes cached with transcripts."
 )]
 struct SearchNotesCommand {
     /// Read additional search query text from stdin. If QUERY is omitted and stdin is piped, stdin is read automatically.
@@ -172,7 +177,8 @@ struct SearchNotesCommand {
 
 #[derive(Debug, Args)]
 struct OpenNoteCommand {
-    /// Granola note ID, e.g. not_1d3tmYTlCICgjy.
+    /// Granola note ID or copied Granola note URL.
+    #[arg(value_name = "NOTE_ID_OR_URL")]
     note_id: String,
     /// Print the note URL instead of opening it.
     #[arg(long)]
@@ -192,6 +198,9 @@ pub async fn handle(
             search_notes(command, &cache_store, warning_client.as_ref(), output).await
         }
         command => {
+            if let NotesSubcommand::GetMany(command) = &command {
+                require_note_selector(command, "get-many")?;
+            }
             let api_key = resolve_api_key(api_key_override)?;
             let client = GranolaClient::new(api_key)?;
             match command {
@@ -201,7 +210,7 @@ pub async fn handle(
                 NotesSubcommand::Get(command) => {
                     get_note(&client, &cache_store, command, cache_mode, output).await
                 }
-                NotesSubcommand::Hydrate(command) => {
+                NotesSubcommand::GetMany(command) => {
                     hydrate_notes(&client, &cache_store, command, cache_mode, output).await
                 }
                 NotesSubcommand::Open(command) => {
@@ -317,7 +326,7 @@ async fn search_notes(
     let status = cache_store.status()?;
     let hits = cache_store.search(&query, command.limit)?.ok_or_else(|| {
         CliError::invalid_input(
-            "no local cache found; run `granola sync --since 30d --all` before searching",
+            "no local cache found; `granola notes search` searches only local cached notes. Run `granola sync --since 30d --all --include-transcript` before searching transcripts",
         )
     })?;
     let count = hits.len();
@@ -356,7 +365,7 @@ async fn search_notes(
 async fn hydrate_notes(
     client: &impl GranolaApi,
     cache_store: &impl CacheStore,
-    command: HydrateNotesCommand,
+    command: GetManyNotesCommand,
     cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
@@ -394,11 +403,11 @@ async fn hydrate_notes(
 
 async fn hydrate_note_ids(
     client: &impl GranolaApi,
-    command: &HydrateNotesCommand,
+    command: &GetManyNotesCommand,
 ) -> Result<Vec<String>, CliError> {
     let mut ids = normalize_note_refs(&command.note_ids)?;
 
-    if let Some(path) = &command.ids_file {
+    if let Some(path) = &command.notes_file {
         let content = fs::read_to_string(path).map_err(|error| {
             CliError::general(format!(
                 "failed to read IDs from {}: {error}",
@@ -439,12 +448,31 @@ async fn hydrate_note_ids(
         return Ok(ids);
     }
 
+    require_note_selector(command, "get-many")?;
+
     collect_hydrate_selection_ids(client, command).await
+}
+
+fn require_note_selector(command: &GetManyNotesCommand, name: &str) -> Result<(), CliError> {
+    if command.note_ids.is_empty()
+        && command.notes_file.is_none()
+        && !command.stdin
+        && !command_has_selection_filters(command)
+    {
+        return Err(no_note_selector_error(name));
+    }
+    Ok(())
+}
+
+fn no_note_selector_error(command: &str) -> CliError {
+    CliError::invalid_input(format!(
+        "no note selector provided for `granola notes {command}`; pass note IDs/URLs, --notes-file, --stdin, a filter such as --since 7d or --updated-since 24h, or --all"
+    ))
 }
 
 async fn collect_hydrate_selection_ids(
     client: &impl GranolaApi,
-    command: &HydrateNotesCommand,
+    command: &GetManyNotesCommand,
 ) -> Result<Vec<String>, CliError> {
     let page_size = validate_page_size(command.page_size)?;
     let created_after = command
@@ -505,7 +533,7 @@ fn normalize_note_refs(inputs: &[String]) -> Result<Vec<String>, CliError> {
         .collect()
 }
 
-fn command_has_selection_filters(command: &HydrateNotesCommand) -> bool {
+fn command_has_selection_filters(command: &GetManyNotesCommand) -> bool {
     command.created_before.is_some()
         || command.created_after.is_some()
         || command.since.is_some()
@@ -523,7 +551,7 @@ async fn get_note(
     cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
-    let include_transcript = command.include.as_deref() == Some("transcript");
+    let include_transcript = command.include_transcript;
     let note_id = normalize_note_id(&command.note_id)?;
     let mut note = get_note_with_cache(
         client,
@@ -638,7 +666,7 @@ async fn search_cache_warning(
 ) -> Result<Option<String>, CliError> {
     if status.summaries > status.hydrated_notes {
         return Ok(Some(format!(
-            "local cache has {} listed note(s) but only {} hydrated note(s); run `granola sync --since 30d --all --include-transcripts` to search full summaries and transcripts",
+            "local cache has {} listed note(s) but only {} hydrated note(s); run `granola sync --since 30d --all --include-transcript` to search full summaries and transcripts",
             status.summaries,
             status.hydrated_notes
         )));
@@ -663,7 +691,7 @@ async fn search_cache_warning(
         .any(|summary| !matches!(cache_store.contains_fresh_summary(summary), Ok(true)));
 
     Ok(has_remote_uncached_updates.then(|| {
-        "newer or unlisted notes may not be in the local cache; run `granola sync --since 30d --all` to refresh before relying on search results".to_string()
+        "newer or unlisted notes may not be in the local cache; run `granola sync --since 30d --all --include-transcript` to refresh before relying on transcript search results".to_string()
     }))
 }
 
@@ -754,7 +782,7 @@ fn print_search_result_table(
 
 fn print_no_search_hits(query: &str, status: &cache::CacheStatus) {
     if status.summaries == 0 {
-        println!("No notes are cached yet. Run `granola sync --since 30d --all` to populate the local search index.");
+        println!("No notes are cached yet. `granola notes search` searches only local cached notes. Run `granola sync --since 30d --all --include-transcript` to populate the local search index.");
         return;
     }
 
@@ -1044,6 +1072,27 @@ mod tests {
         assert_eq!(api.get_note_requests.lock().unwrap().as_slice(), &[false]);
     }
 
+    #[test]
+    fn get_many_requires_an_explicit_selector() {
+        let command = get_many_command();
+
+        let error = require_note_selector(&command, "get-many").unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("no note selector provided for `granola notes get-many`"));
+    }
+
+    #[test]
+    fn get_many_accepts_list_filters_as_selector() {
+        let command = GetManyNotesCommand {
+            since: Some("7d".to_string()),
+            ..get_many_command()
+        };
+
+        require_note_selector(&command, "get-many").unwrap();
+    }
+
     fn note_summary(id: &str, title: &str, created_at: &str) -> NoteSummary {
         NoteSummary {
             id: id.to_string(),
@@ -1067,6 +1116,27 @@ mod tests {
             "../../tests/fixtures/get_note_with_transcript.json"
         ))
         .unwrap()
+    }
+
+    fn get_many_command() -> GetManyNotesCommand {
+        GetManyNotesCommand {
+            note_ids: Vec::new(),
+            notes_file: None,
+            stdin: false,
+            include_transcript: false,
+            jsonl: false,
+            redact: Vec::new(),
+            created_before: None,
+            created_after: None,
+            since: None,
+            updated_after: None,
+            updated_since: None,
+            folder_id: None,
+            cursor: None,
+            page_size: 10,
+            all: false,
+            limit: None,
+        }
     }
 
     #[derive(Default)]

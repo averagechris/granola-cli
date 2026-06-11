@@ -1,12 +1,12 @@
 # Local Cache and Search
 
-The local cache is a non-secret SQLite database in the OS cache directory. It stores fetched note summaries and hydrated note details so humans and agents can search notes without repeatedly calling the API.
+The local cache is a non-secret SQLite database in the OS cache directory. It stores fetched note summaries and full note details so humans and agents can search notes without repeatedly calling the API. `granola notes search` searches this local cache only; it is not API-backed search.
 
 ```bash
-granola sync --since 30d --all --include-transcripts
+granola sync --since 30d --all --include-transcript
 granola cache status --output json-compact
 granola notes search attendees:will "async config" --output json-compact
-printf 'transcript:renewal' | granola search
+printf 'transcript:renewal' | granola notes search
 granola cache clear
 ```
 
@@ -17,8 +17,8 @@ Design constraints:
 - `sync` and write-through fetch commands merge fetched notes into the existing cache by note ID.
 - `notes get` and full-note export paths read hydrated notes from the cache when the cached data is complete for the requested output; if a requested transcript is missing, they fetch the note from the API and update the cache.
 - Pass `--replace` when you want the cache to contain only the current sync result.
-- List-style commands cache searchable note summaries; get/hydrate/sync-style commands cache full note details.
+- List-style commands cache searchable note summaries; full-note get/get-many/sync-style commands cache full note details.
 - Pass global `--no-cache` to skip read-through cache hits, or `--no-cache-write` to disable write-through cache updates for an invocation.
 - Search uses SQLite FTS5 over note IDs, titles, owners, summaries, attendees, folders, and cached transcript text. Results are ranked by match quality with most-recently-updated notes first when ranks tie.
 - FTS field filters are supported, including `title:`, `owner:`, `attendees:`, `folders:`, `summary_text:`, `summary_markdown:`, and `transcript:`.
-- Phrase queries work with quoted terms, for example `granola search attendees:will "async config"`.
+- Phrase queries work with quoted terms, for example `granola notes search attendees:will "async config"`.

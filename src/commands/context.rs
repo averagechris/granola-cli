@@ -13,11 +13,12 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Args)]
 pub struct ContextCommand {
-    /// Note IDs or copied Granola URLs. If omitted, list filters select notes.
+    /// Note IDs or copied Granola URLs. If omitted, pass a list filter or --all.
+    #[arg(value_name = "NOTE_ID_OR_URL")]
     note_ids: Vec<String>,
     /// Read one note ID or URL per line from this file.
     #[arg(long)]
-    ids_file: Option<PathBuf>,
+    notes_file: Option<PathBuf>,
     /// Read one note ID or URL per line from stdin.
     #[arg(long)]
     stdin: bool,
@@ -27,7 +28,7 @@ pub struct ContextCommand {
     /// Redact sensitive data in output. Repeat or comma-separate values: emails, phones, secrets, attendees.
     #[arg(long, value_enum, value_delimiter = ',')]
     redact: Vec<RedactionKind>,
-    /// Output format.
+    /// Context bundle format.
     #[arg(long, value_enum, default_value_t = ContextFormat::Markdown)]
     format: ContextFormat,
     /// Maximum UTF-8 bytes to print for markdown output.
@@ -86,6 +87,7 @@ pub async fn handle(
     api_key_override: Option<String>,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
+    require_note_selector(&command)?;
     let api_key = resolve_api_key(api_key_override)?;
     let client = GranolaClient::new(api_key)?;
     let ids = resolve_note_ids(&client, &command).await?;
@@ -126,7 +128,7 @@ async fn resolve_note_ids(
     command: &ContextCommand,
 ) -> Result<Vec<String>, CliError> {
     let mut ids = normalize_note_refs(&command.note_ids)?;
-    if let Some(path) = &command.ids_file {
+    if let Some(path) = &command.notes_file {
         let content = fs::read_to_string(path).map_err(|error| {
             CliError::general(format!(
                 "failed to read IDs from {}: {error}",
@@ -157,7 +159,22 @@ async fn resolve_note_ids(
         return Ok(ids);
     }
 
+    require_note_selector(command)?;
+
     collect_selection_ids(client, command).await
+}
+
+fn require_note_selector(command: &ContextCommand) -> Result<(), CliError> {
+    if command.note_ids.is_empty()
+        && command.notes_file.is_none()
+        && !command.stdin
+        && !command_has_selection_filters(command)
+    {
+        return Err(CliError::invalid_input(
+            "no note selector provided for `granola context`; pass note IDs/URLs, --notes-file, --stdin, a filter such as --since 7d or --updated-since 24h, or --all",
+        ));
+    }
+    Ok(())
 }
 
 async fn collect_selection_ids(
@@ -372,5 +389,49 @@ mod tests {
             .unwrap();
 
         assert_eq!(ids, vec!["not_abc", "not_def"]);
+    }
+
+    #[test]
+    fn context_requires_an_explicit_selector() {
+        let command = context_command();
+
+        let error = require_note_selector(&command).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("no note selector provided for `granola context`"));
+    }
+
+    #[test]
+    fn context_accepts_all_as_selector() {
+        let command = ContextCommand {
+            all: true,
+            ..context_command()
+        };
+
+        require_note_selector(&command).unwrap();
+    }
+
+    fn context_command() -> ContextCommand {
+        ContextCommand {
+            note_ids: Vec::new(),
+            notes_file: None,
+            stdin: false,
+            include_transcript: false,
+            redact: Vec::new(),
+            format: ContextFormat::Markdown,
+            max_bytes: None,
+            output_file: None,
+            created_before: None,
+            created_after: None,
+            since: None,
+            updated_after: None,
+            updated_since: None,
+            folder_id: None,
+            cursor: None,
+            page_size: 10,
+            all: false,
+            limit: None,
+        }
     }
 }

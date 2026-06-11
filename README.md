@@ -20,11 +20,11 @@ granola recent
 granola last --include-transcript
 
 # Get a note by ID or copied Granola URL, including transcript, as compact JSON.
-granola notes get not_1d3tmYTlCICgjy --include transcript --output json-compact
-granola show https://app.granola.ai/notes/not_1d3tmYTlCICgjy
+granola notes get not_1d3tmYTlCICgjy --include-transcript --output json-compact
+granola notes get https://app.granola.ai/notes/not_1d3tmYTlCICgjy
 
-# Hydrate many notes into full note records for agents.
-granola notes hydrate --since 7d --include-transcript --jsonl
+# Get many full note records for agents.
+granola notes get-many --since 7d --include-transcript --jsonl
 
 # Open a note in the browser, or print its URL for scripts.
 granola notes open not_1d3tmYTlCICgjy
@@ -90,17 +90,17 @@ https://averagechris.srht.site/granola-cli/
 Current macOS arm64 artifact path after publishing:
 
 ```text
-https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.6.1-aarch64-darwin.tar.gz
+https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.7.0-aarch64-darwin.tar.gz
 ```
 
 Manual install example:
 
 ```bash
-curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.6.1-aarch64-darwin.tar.gz
-curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.6.1-aarch64-darwin.tar.gz.sha256
-sha256sum -c granola-cli-v0.6.1-aarch64-darwin.tar.gz.sha256
-tar -xzf granola-cli-v0.6.1-aarch64-darwin.tar.gz
-install -m 0755 granola-cli-v0.6.1-aarch64-darwin/granola ~/.local/bin/granola
+curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.7.0-aarch64-darwin.tar.gz
+curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.7.0-aarch64-darwin.tar.gz.sha256
+sha256sum -c granola-cli-v0.7.0-aarch64-darwin.tar.gz.sha256
+tar -xzf granola-cli-v0.7.0-aarch64-darwin.tar.gz
+install -m 0755 granola-cli-v0.7.0-aarch64-darwin/granola ~/.local/bin/granola
 ```
 
 See [Hosted Downloads](docs/downloads.md).
@@ -112,22 +112,23 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola auth status [--validate]`
 - `granola api get /v1/notes --query page_size=5`
 - `granola notes list [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--no-truncate]`
-- `granola notes get NOTE_ID_OR_URL [--include transcript]`
-- `granola notes hydrate [NOTE_ID_OR_URL ... | --ids-file FILE | --stdin | list filters] [--include-transcript] [--jsonl]`
+- `granola notes get NOTE_ID_OR_URL [--include-transcript]`
+- `granola notes get-many [NOTE_ID_OR_URL ... | --notes-file FILE | --stdin | list filters] [--include-transcript] [--jsonl]`
 - `granola notes open NOTE_ID_OR_URL [--print]`
 - `granola folders list [--cursor CURSOR] [--page-size N] [--all] [--limit N]`
 - `granola folders tree`
-- `granola recent|today|yesterday|last|search|show|open`
-- `granola export note NOTE_ID_OR_URL [--format markdown|json|txt|transcript] [--include-transcript] [--frontmatter] [-o FILE] [--force|--skip-existing]`
+- `granola recent|today|yesterday|last`
+- `granola export note NOTE_ID_OR_URL [--format markdown|json|text|transcript] [--include-transcript] [--frontmatter] [-o FILE] [--force|--skip-existing]`
 - `granola export notes [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--format jsonl|markdown|json] [-o FILE | --output-dir DIR] [--include-transcript] [--frontmatter] [--only-changed] [--force|--skip-existing]`
-- `granola sync [--since 30d] [--all] [--include-transcripts] [--replace]`
+- `granola sync [--since 30d] [--all] [--include-transcript] [--replace]`
 - `granola cache status|path|verify|vacuum|export|clear`
 - `granola views create|list|show|delete|run`
 - `granola digest [--since 7d] [--folder-id FOL_ID] [--all] [--limit N]`
-- `granola context [NOTE_ID_OR_URL ... | --ids-file FILE | --stdin | list filters] [--include-transcript] [--format markdown|json] [--max-bytes N] [-o FILE]`
+- `granola context [NOTE_ID_OR_URL ... | --notes-file FILE | --stdin | list filters] [--include-transcript] [--format markdown|json] [--max-bytes N] [-o FILE]`
 - `granola watch [--since 2h] [--updated-since 30m] [--folder-id FOL_ID] [--interval-seconds 60] [--iterations N] [--include-existing]`
 
-Redaction flags are available on note detail, hydrate, export, and context commands with `--redact emails,phones,secrets,attendees`.
+Redaction flags are available on note detail, get-many, export, and context commands with `--redact emails,phones,secrets,attendees`.
+Batch full-note commands such as `notes get-many` and `context` require an explicit selector: note IDs/URLs, `--notes-file`, `--stdin`, a list filter, or `--all`.
 - `granola config show|path|set KEY VALUE`
 - `granola completions zsh|bash|fish|powershell|elvish`
 - `granola completions install zsh|bash|fish|powershell|elvish`

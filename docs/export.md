@@ -39,5 +39,5 @@ Export formats:
 - `markdown`: portable human-readable notes
 - `json`: pretty JSON
 - `jsonl`: one JSON object per line for multi-note exports
-- `txt`: title plus plain summary
+- `text`: title plus plain summary
 - `transcript`: transcript speaker labels and text

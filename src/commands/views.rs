@@ -249,7 +249,7 @@ fn run_search_view(
 ) -> Result<(), CliError> {
     let hits = cache::search(query, limit)?.ok_or_else(|| {
         CliError::invalid_input(
-            "no local cache found; run `granola sync --since 30d --all` before running search views",
+            "no local cache found; search views use only local cached notes. Run `granola sync --since 30d --all --include-transcript` before running transcript search views",
         )
     })?;
     if output.is_json() {

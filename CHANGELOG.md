@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased
+## v0.7.0 - 2026-06-11
 
 ### Changed
 
 - Full-note reads now use complete cached note details before hitting the API, with `--no-cache` reserved for skipping cache reads and `--no-cache-write` for disabling cache updates.
+- Breaking CLI cleanup for consistent note commands: `notes get` now uses `--include-transcript`, `notes hydrate` is now `notes get-many`, note-list file inputs use `--notes-file`, top-level `search`/`show`/`open` aliases were removed in favor of `notes search`/`notes get`/`notes open`, and single-note text export is now `--format text`.
+- `sync` now uses the same `--include-transcript` flag spelling as other note commands.
+- `notes get-many` and `context` now require an explicit selector such as note IDs/URLs, `--notes-file`, `--stdin`, list filters, or `--all` instead of silently selecting the first page.
+- Search help and cache warnings now make clear that `notes search` uses only the local cache, not a remote Granola API search endpoint.
 
 ## v0.6.1 - 2026-06-10
 

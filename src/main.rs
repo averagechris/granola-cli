@@ -69,7 +69,7 @@ enum Command {
     Auth(commands::auth::AuthCommand),
     /// Make guarded raw Granola API requests.
     Api(commands::api::ApiCommand),
-    /// List and retrieve Granola notes.
+    /// List, retrieve, search cached notes, and open Granola notes.
     Notes(commands::notes::NotesCommand),
     /// List accessible Granola folders.
     Folders(commands::folders::FoldersCommand),
@@ -81,22 +81,6 @@ enum Command {
     Yesterday,
     /// Fetch the most recently updated note.
     Last(commands::shortcuts::LastCommand),
-    /// Search the local note cache.
-    #[command(
-        long_about = "Search the local SQLite FTS index. Supports SQLite FTS5 syntax such as field filters and phrases. Examples: `granola search apple`, `granola search attendees:will async config`, `granola search attendees:will \"async config\"`, `granola search transcript:renewal`."
-    )]
-    Search {
-        /// Read additional search query text from stdin. If QUERY is omitted and stdin is piped, stdin is read automatically.
-        #[arg(long)]
-        stdin: bool,
-        /// Search query. Multiple arguments are joined, so `granola search attendees:will "async config"` works without quoting the entire query.
-        #[arg(value_name = "QUERY", num_args = 0..)]
-        query: Vec<String>,
-    },
-    /// Show one note by ID.
-    Show { note_id: String },
-    /// Open one note in the browser.
-    Open { note_id: String },
     /// Export notes and transcripts.
     Export(commands::export::ExportCommand),
     /// Summarize recent note metadata for review.
@@ -199,15 +183,6 @@ async fn run(
         }
         Command::Last(command) => {
             commands::shortcuts::last(command, api_key_override, cache_mode, output).await
-        }
-        Command::Search { query, stdin } => {
-            commands::shortcuts::search(query, stdin, api_key_override, output).await
-        }
-        Command::Show { note_id } => {
-            commands::shortcuts::show(note_id, api_key_override, cache_mode, output).await
-        }
-        Command::Open { note_id } => {
-            commands::shortcuts::open(note_id, api_key_override, cache_mode, output).await
         }
         Command::Export(command) => {
             commands::export::handle(command, api_key_override, cache_mode, output).await

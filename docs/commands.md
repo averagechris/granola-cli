@@ -45,9 +45,9 @@ granola notes list \
   [--order asc|desc] \
   [--no-truncate]
 
-granola notes get NOTE_ID_OR_URL [--include transcript]
-granola notes hydrate [NOTE_ID_OR_URL ...] [--ids-file FILE] [--stdin] [--include-transcript] [--jsonl]
-granola notes hydrate [list filters] [--include-transcript] [--jsonl]
+granola notes get NOTE_ID_OR_URL [--include-transcript]
+granola notes get-many [NOTE_ID_OR_URL ...] [--notes-file FILE] [--stdin] [--include-transcript] [--jsonl]
+granola notes get-many [list filters] [--include-transcript] [--jsonl]
 granola notes search [--stdin] [QUERY ...] [--limit N]
 granola notes open NOTE_ID_OR_URL [--print]
 ```
@@ -62,6 +62,10 @@ granola notes search attendees:will "async config"
 granola notes search transcript:renewal
 printf 'attendees:will "async config"' | granola notes search
 ```
+
+`notes search` searches only the local cache; it is not backed by a remote Granola API search endpoint. Run `granola sync --since 30d --all --include-transcript` first, especially before searching transcripts.
+
+`notes get-many` requires an explicit selector: note IDs/URLs, `--notes-file`, `--stdin`, a filter such as `--since 7d` or `--folder-id FOL_ID`, or `--all`.
 
 List output defaults to most-recently-updated notes first. Search ranks matches first and uses most-recently-updated notes as the tie-breaker.
 
@@ -79,16 +83,13 @@ granola recent
 granola today
 granola yesterday
 granola last [--include-transcript]
-granola search [--stdin] [QUERY ...]
-granola show NOTE_ID_OR_URL
-granola open NOTE_ID_OR_URL
 ```
 
 ## Export
 
 ```bash
 granola export note NOTE_ID_OR_URL \
-  [--format markdown|json|txt|transcript] \
+  [--format markdown|json|text|transcript] \
   [--include-transcript] \
   [--frontmatter] \
   [-o FILE] \
@@ -112,7 +113,7 @@ granola export notes \
 ## Utilities
 
 ```bash
-granola sync [--since 30d] [--all] [--include-transcripts] [--replace]
+granola sync [--since 30d] [--all] [--include-transcript] [--replace]
 granola cache status [--verbose]
 granola cache path
 granola cache verify
@@ -125,7 +126,7 @@ granola views show NAME
 granola views run NAME
 granola views delete NAME
 granola digest [--since 7d] [--folder-id FOL_ID] [--all] [--limit N]
-granola context [NOTE_ID_OR_URL ... | --ids-file FILE | --stdin | list filters] [--include-transcript] [--format markdown|json] [--max-bytes N] [-o FILE]
+granola context [NOTE_ID_OR_URL ... | --notes-file FILE | --stdin | list filters] [--include-transcript] [--format markdown|json] [--max-bytes N] [-o FILE]
 granola watch [--since 2h] [--updated-since 30m] [--folder-id FOL_ID] [--interval-seconds 60] [--iterations N] [--include-existing]
 granola config show
 granola config path
@@ -138,3 +139,5 @@ granola completions install zsh|bash|fish|powershell|elvish
 ```
 
 Commands that print or write full note content support privacy redaction with repeated or comma-separated `--redact emails,phones,secrets,attendees` values.
+
+`context` also requires an explicit note selector: note IDs/URLs, `--notes-file`, `--stdin`, a list filter, or `--all`.

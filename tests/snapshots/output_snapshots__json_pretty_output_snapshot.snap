@@ -55,5 +55,5 @@ expression: "normalize_json_stdout(&stdout, home.path(), false)"
       }
     }
   ],
-  "warning": "local cache has 3 listed note(s) but only 2 hydrated note(s); run `granola sync --since 30d --all --include-transcripts` to search full summaries and transcripts"
+  "warning": "local cache has 3 listed note(s) but only 2 hydrated note(s); run `granola sync --since 30d --all --include-transcript` to search full summaries and transcripts"
 }

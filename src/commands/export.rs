@@ -30,7 +30,8 @@ enum ExportSubcommand {
 
 #[derive(Debug, Args)]
 struct ExportNoteCommand {
-    /// Granola note ID, e.g. not_1d3tmYTlCICgjy.
+    /// Granola note ID or copied Granola note URL.
+    #[arg(value_name = "NOTE_ID_OR_URL")]
     note_id: String,
     /// Export format.
     #[arg(long, value_enum, default_value_t = NoteExportFormat::Markdown)]
@@ -137,7 +138,7 @@ struct ExportManifestEntry {
 enum NoteExportFormat {
     Markdown,
     Json,
-    Txt,
+    Text,
     Transcript,
 }
 
@@ -208,7 +209,7 @@ async fn export_note(
             render_note_markdown(&note, command.include_transcript, command.frontmatter)
         }
         NoteExportFormat::Json => serde_json::to_string_pretty(&note).map_err(CliError::from)?,
-        NoteExportFormat::Txt => render_note_text(&note),
+        NoteExportFormat::Text => render_note_text(&note),
         NoteExportFormat::Transcript => {
             render_transcript(note.transcript.as_deref().unwrap_or(&[]))
         }

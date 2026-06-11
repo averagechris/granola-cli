@@ -38,9 +38,9 @@ pub struct SyncCommand {
     /// Maximum number of notes to sync.
     #[arg(long)]
     limit: Option<usize>,
-    /// Include transcripts in the local cache.
+    /// Include transcript data in the local cache.
     #[arg(long)]
-    include_transcripts: bool,
+    include_transcript: bool,
     /// Replace the cache instead of merging fetched notes into it.
     #[arg(long)]
     replace: bool,
@@ -97,7 +97,7 @@ pub async fn handle(
 
     let mut fetched = Vec::with_capacity(ids.len());
     for id in ids {
-        fetched.push(client.get_note(&id, command.include_transcripts).await?);
+        fetched.push(client.get_note(&id, command.include_transcript).await?);
     }
 
     let fetched_count = fetched.len();
@@ -117,7 +117,7 @@ pub async fn handle(
         "cached_hydrated_notes": status.hydrated_notes,
         "cached_transcript_notes": status.transcript_notes,
         "synced_at": status.synced_at,
-        "included_transcripts": command.include_transcripts,
+        "included_transcripts": command.include_transcript,
     });
     if output.is_json() {
         return print_json(&data, output);

@@ -8,7 +8,11 @@ fn default_table_output_snapshot() {
     let home = temp_home_with_cache();
     seed_cache(home.path());
 
-    let stdout = run_stdout(home.path(), &["search", "Planning"], &[("COLUMNS", "200")]);
+    let stdout = run_stdout(
+        home.path(),
+        &["notes", "search", "Planning"],
+        &[("COLUMNS", "200")],
+    );
 
     insta::assert_snapshot!(stdout);
 }
@@ -18,7 +22,11 @@ fn adaptive_default_list_output_snapshot() {
     let home = temp_home_with_cache();
     seed_cache(home.path());
 
-    let stdout = run_stdout(home.path(), &["search", "Planning"], &[("COLUMNS", "20")]);
+    let stdout = run_stdout(
+        home.path(),
+        &["notes", "search", "Planning"],
+        &[("COLUMNS", "20")],
+    );
 
     insta::assert_snapshot!(stdout);
 }
@@ -30,7 +38,7 @@ fn explicit_table_output_snapshot() {
 
     let stdout = run_stdout(
         home.path(),
-        &["search", "Planning", "--output", "table"],
+        &["notes", "search", "Planning", "--output", "table"],
         &[("COLUMNS", "20")],
     );
 
@@ -44,7 +52,7 @@ fn explicit_list_output_snapshot() {
 
     let stdout = run_stdout(
         home.path(),
-        &["search", "Planning", "--output", "list"],
+        &["notes", "search", "Planning", "--output", "list"],
         &[],
     );
 
@@ -58,7 +66,7 @@ fn json_compact_output_snapshot() {
 
     let stdout = run_stdout(
         home.path(),
-        &["search", "Planning", "--output", "json-compact"],
+        &["notes", "search", "Planning", "--output", "json-compact"],
         &[],
     );
 
@@ -72,7 +80,7 @@ fn json_pretty_output_snapshot() {
 
     let stdout = run_stdout(
         home.path(),
-        &["search", "Planning", "--output", "json-pretty"],
+        &["notes", "search", "Planning", "--output", "json-pretty"],
         &[],
     );
 

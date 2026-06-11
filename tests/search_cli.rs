@@ -38,12 +38,12 @@ fn doctor_human_output_includes_package_version() {
 }
 
 #[test]
-fn top_level_search_accepts_multiple_query_arguments() {
+fn notes_search_accepts_multiple_query_arguments() {
     let home = temp_home_with_cache();
     seed_cache(home.path());
 
     granola(home.path())
-        .args(["search", "attendees:will", "async config"])
+        .args(["notes", "search", "attendees:will", "async config"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Async Config Refinement"))
@@ -52,13 +52,13 @@ fn top_level_search_accepts_multiple_query_arguments() {
 }
 
 #[test]
-fn top_level_search_reads_query_from_piped_stdin() {
+fn notes_search_reads_query_from_piped_stdin() {
     let home = temp_home_with_cache();
     seed_cache(home.path());
 
     let mut command = granola(home.path());
     command
-        .args(["search"])
+        .args(["notes", "search"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -106,7 +106,7 @@ fn search_supports_list_output() {
     seed_cache(home.path());
 
     granola(home.path())
-        .args(["search", "mint", "--output", "list"])
+        .args(["notes", "search", "mint", "--output", "list"])
         .assert()
         .success()
         .stdout(predicate::str::contains("id: not_mint"))
@@ -122,7 +122,7 @@ fn table_output_falls_back_to_list_when_terminal_is_narrow() {
 
     granola(home.path())
         .env("COLUMNS", "20")
-        .args(["search", "mint"])
+        .args(["notes", "search", "mint"])
         .assert()
         .success()
         .stdout(predicate::str::contains("id: not_mint"))
@@ -137,7 +137,7 @@ fn explicit_table_output_is_respected_when_terminal_is_narrow() {
 
     granola(home.path())
         .env("COLUMNS", "20")
-        .args(["search", "mint", "--output", "table"])
+        .args(["notes", "search", "mint", "--output", "table"])
         .assert()
         .success()
         .stdout(predicate::str::contains("+----------------"))
@@ -182,12 +182,46 @@ fn compact_flag_is_not_supported() {
 }
 
 #[test]
+fn sync_help_uses_singular_include_transcript_flag() {
+    let home = temp_home_with_cache();
+
+    granola(home.path())
+        .args(["sync", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--include-transcript"))
+        .stdout(predicate::str::contains("--include-transcripts").not());
+}
+
+#[test]
+fn get_many_requires_explicit_selector_before_auth() {
+    let home = temp_home_with_cache();
+
+    granola(home.path())
+        .args(["notes", "get-many"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no note selector provided"));
+}
+
+#[test]
+fn context_requires_explicit_selector_before_auth() {
+    let home = temp_home_with_cache();
+
+    granola(home.path())
+        .args(["context"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no note selector provided"));
+}
+
+#[test]
 fn search_explains_when_existing_cache_has_no_matches() {
     let home = temp_home_with_cache();
     seed_cache(home.path());
 
     granola(home.path())
-        .args(["search", "definitelyabsent"])
+        .args(["notes", "search", "definitelyabsent"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -204,7 +238,7 @@ fn search_explains_when_cache_index_is_empty() {
     create_empty_cache(home.path());
 
     granola(home.path())
-        .args(["search", "mint"])
+        .args(["notes", "search", "mint"])
         .assert()
         .success()
         .stdout(predicate::str::contains("No notes are cached yet."));
@@ -216,7 +250,7 @@ fn search_errors_when_no_query_is_available() {
     seed_cache(home.path());
 
     granola(home.path())
-        .args(["search"])
+        .args(["notes", "search"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
