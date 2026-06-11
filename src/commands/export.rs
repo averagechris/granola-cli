@@ -1,4 +1,5 @@
 use crate::api::{resolve_api_key, validate_page_size, GranolaClient, ListNotesParams};
+use crate::cache::{self, CacheMode, CacheStore};
 use crate::error::CliError;
 use crate::note_ref::normalize_note_id;
 use crate::output::{print_json, OutputOptions};
@@ -163,20 +164,28 @@ enum SortOrder {
 pub async fn handle(
     command: ExportCommand,
     api_key_override: Option<String>,
+    cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let api_key = resolve_api_key(api_key_override)?;
     let client = GranolaClient::new(api_key)?;
+    let cache_store = cache::OsCacheStore;
 
     match command.command {
-        ExportSubcommand::Note(command) => export_note(&client, command, output).await,
-        ExportSubcommand::Notes(command) => export_notes(&client, command, output).await,
+        ExportSubcommand::Note(command) => {
+            export_note(&client, &cache_store, command, cache_mode, output).await
+        }
+        ExportSubcommand::Notes(command) => {
+            export_notes(&client, &cache_store, command, cache_mode, output).await
+        }
     }
 }
 
 async fn export_note(
     client: &GranolaClient,
+    cache_store: &impl CacheStore,
     command: ExportNoteCommand,
+    cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let include_transcript = command.include_transcript
@@ -185,7 +194,14 @@ async fn export_note(
             NoteExportFormat::Transcript | NoteExportFormat::Json
         );
     let note_id = normalize_note_id(&command.note_id)?;
-    let mut note = client.get_note(&note_id, include_transcript).await?;
+    let mut note = get_note_with_cache(
+        client,
+        cache_store,
+        &note_id,
+        include_transcript,
+        cache_mode,
+    )
+    .await?;
     redact_note(&mut note, &command.redact);
     let content = match command.format {
         NoteExportFormat::Markdown => {
@@ -208,7 +224,9 @@ async fn export_note(
 
 async fn export_notes(
     client: &GranolaClient,
+    cache_store: &impl CacheStore,
     command: ExportNotesCommand,
+    cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     if command.only_changed && command.output_dir.is_none() {
@@ -218,7 +236,16 @@ async fn export_notes(
     }
     let notes = collect_note_summaries(client, &command).await?;
     if let Some(output_dir) = command.output_dir.as_deref() {
-        return export_notes_to_dir(client, &notes, output_dir, &command, output).await;
+        return export_notes_to_dir(
+            client,
+            cache_store,
+            &notes,
+            output_dir,
+            &command,
+            cache_mode,
+            output,
+        )
+        .await;
     }
 
     let content = match command.format {
@@ -237,9 +264,11 @@ async fn export_notes(
 
 async fn export_notes_to_dir(
     client: &GranolaClient,
+    cache_store: &impl CacheStore,
     notes: &[NoteSummary],
     output_dir: &Path,
     command: &ExportNotesCommand,
+    cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     if matches!(command.format, NotesExportFormat::Jsonl) {
@@ -265,9 +294,14 @@ async fn export_notes_to_dir(
             }
         }
 
-        let mut note = client
-            .get_note(&summary.id, command.include_transcript)
-            .await?;
+        let mut note = get_note_with_cache(
+            client,
+            cache_store,
+            &summary.id,
+            command.include_transcript,
+            cache_mode,
+        )
+        .await?;
         redact_note(&mut note, &command.redact);
         let extension = match command.format {
             NotesExportFormat::Markdown => "md",
@@ -323,6 +357,31 @@ async fn export_notes_to_dir(
         );
     }
     Ok(())
+}
+
+async fn get_note_with_cache(
+    client: &GranolaClient,
+    cache_store: &impl CacheStore,
+    note_id: &str,
+    include_transcript: bool,
+    cache_mode: CacheMode,
+) -> Result<Note, CliError> {
+    if cache_mode.read {
+        if let Some(mut note) = cache_store.get_note(note_id)? {
+            if !include_transcript || note.transcript.is_some() {
+                if !include_transcript {
+                    note.transcript = None;
+                }
+                return Ok(note);
+            }
+        }
+    }
+
+    let note = client.get_note(note_id, include_transcript).await?;
+    if cache_mode.write {
+        cache_store.upsert_notes(std::slice::from_ref(&note))?;
+    }
+    Ok(note)
 }
 
 async fn collect_note_summaries(

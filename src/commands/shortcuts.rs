@@ -1,5 +1,5 @@
 use crate::api::{resolve_api_key, try_resolve_api_key, GranolaClient, ListNotesParams};
-use crate::cache;
+use crate::cache::{self, CacheMode};
 use crate::error::CliError;
 use crate::note_ref::normalize_note_id;
 use crate::output::{print_json, print_rows, OutputOptions};
@@ -63,7 +63,7 @@ pub async fn yesterday(
 pub async fn last(
     command: LastCommand,
     api_key_override: Option<String>,
-    write_through_cache: bool,
+    cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let api_key = resolve_api_key(api_key_override)?;
@@ -81,10 +81,8 @@ pub async fn last(
     else {
         return Err(CliError::not_found("no notes found"));
     };
-    let note = client
-        .get_note(&summary.id, command.include_transcript)
-        .await?;
-    cache_notes_if_enabled(std::slice::from_ref(&note), write_through_cache)?;
+    let note =
+        get_note_with_cache(&client, &summary.id, command.include_transcript, cache_mode).await?;
 
     if output.is_json() {
         return print_json(&note, output);
@@ -97,14 +95,13 @@ pub async fn last(
 pub async fn show(
     note_id: String,
     api_key_override: Option<String>,
-    write_through_cache: bool,
+    cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let api_key = resolve_api_key(api_key_override)?;
     let client = GranolaClient::new(api_key)?;
     let note_id = normalize_note_id(&note_id)?;
-    let note = client.get_note(&note_id, false).await?;
-    cache_notes_if_enabled(std::slice::from_ref(&note), write_through_cache)?;
+    let note = get_note_with_cache(&client, &note_id, false, cache_mode).await?;
     if output.is_json() {
         return print_json(&note, output);
     }
@@ -115,14 +112,13 @@ pub async fn show(
 pub async fn open(
     note_id: String,
     api_key_override: Option<String>,
-    write_through_cache: bool,
+    cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let api_key = resolve_api_key(api_key_override)?;
     let client = GranolaClient::new(api_key)?;
     let note_id = normalize_note_id(&note_id)?;
-    let note = client.get_note(&note_id, false).await?;
-    cache_notes_if_enabled(std::slice::from_ref(&note), write_through_cache)?;
+    let note = get_note_with_cache(&client, &note_id, false, cache_mode).await?;
     open::that(&note.web_url)
         .map_err(|error| CliError::general(format!("failed to open note URL: {error}")))?;
     if output.is_json() {
@@ -135,6 +131,28 @@ pub async fn open(
         println!("opened {}", note.web_url);
     }
     Ok(())
+}
+
+async fn get_note_with_cache(
+    client: &GranolaClient,
+    note_id: &str,
+    include_transcript: bool,
+    cache_mode: CacheMode,
+) -> Result<Note, CliError> {
+    if cache_mode.read {
+        if let Some(mut note) = cache::get_note(note_id)? {
+            if !include_transcript || note.transcript.is_some() {
+                if !include_transcript {
+                    note.transcript = None;
+                }
+                return Ok(note);
+            }
+        }
+    }
+
+    let note = client.get_note(note_id, include_transcript).await?;
+    cache_notes_if_enabled(std::slice::from_ref(&note), cache_mode.write)?;
+    Ok(note)
 }
 
 pub async fn search(

@@ -142,6 +142,8 @@ Global scriptability flags:
 - `--quiet`
 - `--api-key KEY` for process-local auth override only
 - `--profile NAME` to apply non-secret defaults from config
+- `--no-cache` to skip read-through cache hits for full-note commands
+- `--no-cache-write` to skip write-through cache updates
 
 ## Contributing
 

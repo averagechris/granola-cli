@@ -7,7 +7,8 @@ Global flags available on every command:
 - `--quiet`
 - `--api-key KEY` for one process only
 - `--profile NAME`
-- `--no-cache` to disable automatic write-through updates to the local note cache
+- `--no-cache` to skip read-through cache hits for commands that can reuse cached note details
+- `--no-cache-write` to disable automatic write-through updates to the local note cache
 
 ## Auth
 

@@ -9,6 +9,7 @@ mod output;
 mod redaction;
 mod types;
 
+use cache::CacheMode;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use error::CliError;
@@ -40,9 +41,13 @@ struct Cli {
     #[arg(long, global = true, value_name = "KEY")]
     api_key: Option<String>,
 
-    /// Disable automatic write-through updates to the local note cache.
+    /// Skip reading from the local note cache for read-through commands.
     #[arg(long, global = true)]
     no_cache: bool,
+
+    /// Disable automatic write-through updates to the local note cache.
+    #[arg(long, global = true)]
+    no_cache_write: bool,
 
     #[command(subcommand)]
     command: Command,
@@ -157,8 +162,8 @@ async fn main() {
     };
     let output = OutputOptions::new(output_format, output_format_explicit, cli.fields, quiet);
 
-    let write_through_cache = !cli.no_cache;
-    if let Err(err) = run(cli.command, cli.api_key, write_through_cache, &output).await {
+    let cache_mode = CacheMode::new(!cli.no_cache, !cli.no_cache_write);
+    if let Err(err) = run(cli.command, cli.api_key, cache_mode, &output).await {
         if output.is_json() {
             emit_error_json(&err, output.json_compact());
         } else {
@@ -171,41 +176,41 @@ async fn main() {
 async fn run(
     command: Command,
     api_key_override: Option<String>,
-    write_through_cache: bool,
+    cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     match command {
         Command::Auth(command) => commands::auth::handle(command, api_key_override, output).await,
         Command::Api(command) => commands::api::handle(command, api_key_override, output).await,
         Command::Notes(command) => {
-            commands::notes::handle(command, api_key_override, write_through_cache, output).await
+            commands::notes::handle(command, api_key_override, cache_mode, output).await
         }
         Command::Folders(command) => {
             commands::folders::handle(command, api_key_override, output).await
         }
         Command::Recent => {
-            commands::shortcuts::recent(api_key_override, write_through_cache, output).await
+            commands::shortcuts::recent(api_key_override, cache_mode.write, output).await
         }
         Command::Today => {
-            commands::shortcuts::today(api_key_override, write_through_cache, output).await
+            commands::shortcuts::today(api_key_override, cache_mode.write, output).await
         }
         Command::Yesterday => {
-            commands::shortcuts::yesterday(api_key_override, write_through_cache, output).await
+            commands::shortcuts::yesterday(api_key_override, cache_mode.write, output).await
         }
         Command::Last(command) => {
-            commands::shortcuts::last(command, api_key_override, write_through_cache, output).await
+            commands::shortcuts::last(command, api_key_override, cache_mode, output).await
         }
         Command::Search { query, stdin } => {
             commands::shortcuts::search(query, stdin, api_key_override, output).await
         }
         Command::Show { note_id } => {
-            commands::shortcuts::show(note_id, api_key_override, write_through_cache, output).await
+            commands::shortcuts::show(note_id, api_key_override, cache_mode, output).await
         }
         Command::Open { note_id } => {
-            commands::shortcuts::open(note_id, api_key_override, write_through_cache, output).await
+            commands::shortcuts::open(note_id, api_key_override, cache_mode, output).await
         }
         Command::Export(command) => {
-            commands::export::handle(command, api_key_override, output).await
+            commands::export::handle(command, api_key_override, cache_mode, output).await
         }
         Command::Digest(command) => {
             commands::digest::handle(command, api_key_override, output).await

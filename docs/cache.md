@@ -15,9 +15,10 @@ Design constraints:
 - The cache never stores API keys or other CLI credentials.
 - The primary cache file is `notes.sqlite`; `cache clear` also removes the legacy `notes.json` cache if present.
 - `sync` and write-through fetch commands merge fetched notes into the existing cache by note ID.
+- `notes get` and full-note export paths read hydrated notes from the cache when the cached data is complete for the requested output; if a requested transcript is missing, they fetch the note from the API and update the cache.
 - Pass `--replace` when you want the cache to contain only the current sync result.
 - List-style commands cache searchable note summaries; get/hydrate/sync-style commands cache full note details.
-- Pass global `--no-cache` to disable write-through cache updates for an invocation.
+- Pass global `--no-cache` to skip read-through cache hits, or `--no-cache-write` to disable write-through cache updates for an invocation.
 - Search uses SQLite FTS5 over note IDs, titles, owners, summaries, attendees, folders, and cached transcript text. Results are ranked by match quality with most-recently-updated notes first when ranks tie.
 - FTS field filters are supported, including `title:`, `owner:`, `attendees:`, `folders:`, `summary_text:`, `summary_markdown:`, and `transcript:`.
 - Phrase queries work with quoted terms, for example `granola search attendees:will "async config"`.

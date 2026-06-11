@@ -67,9 +67,22 @@ pub struct CacheVerifyResult {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OsCacheStore;
 
+#[derive(Debug, Clone, Copy)]
+pub struct CacheMode {
+    pub read: bool,
+    pub write: bool,
+}
+
+impl CacheMode {
+    pub fn new(read: bool, write: bool) -> Self {
+        Self { read, write }
+    }
+}
+
 pub trait CacheStore {
     fn upsert_summaries(&self, summaries: &[NoteSummary]) -> Result<(), CliError>;
     fn upsert_notes(&self, notes: &[Note]) -> Result<(), CliError>;
+    fn get_note(&self, note_id: &str) -> Result<Option<Note>, CliError>;
     fn status(&self) -> Result<CacheStatus, CliError>;
     fn search(
         &self,
@@ -86,6 +99,10 @@ impl CacheStore for OsCacheStore {
 
     fn upsert_notes(&self, notes: &[Note]) -> Result<(), CliError> {
         upsert_notes(notes)
+    }
+
+    fn get_note(&self, note_id: &str) -> Result<Option<Note>, CliError> {
+        get_note(note_id)
     }
 
     fn status(&self) -> Result<CacheStatus, CliError> {
@@ -142,6 +159,25 @@ pub fn upsert_notes(notes: &[Note]) -> Result<(), CliError> {
     let path = cache_path()?;
     let mut conn = open_cache(&path)?;
     upsert_notes_in_conn(&mut conn, notes)
+}
+
+pub fn get_note(note_id: &str) -> Result<Option<Note>, CliError> {
+    let path = cache_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let conn = open_existing(&path)?;
+    let raw: Option<String> = conn
+        .query_row(
+            "SELECT note_json FROM notes WHERE id = ?1",
+            params![note_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(db_error)?;
+    raw.map(|value| serde_json::from_str(&value).map_err(CliError::from))
+        .transpose()
 }
 
 pub fn clear() -> Result<bool, CliError> {

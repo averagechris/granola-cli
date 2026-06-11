@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Full-note reads now use complete cached note details before hitting the API, with `--no-cache` reserved for skipping cache reads and `--no-cache-write` for disabling cache updates.
+
 ## v0.6.1 - 2026-06-10
 
 ### Fixed

@@ -2,7 +2,7 @@ use crate::api::{
     resolve_api_key, try_resolve_api_key, validate_page_size, GranolaApi, GranolaClient,
     ListNotesParams,
 };
-use crate::cache::{self, CacheStore};
+use crate::cache::{self, CacheMode, CacheStore};
 use crate::error::CliError;
 use crate::note_ref::normalize_note_id;
 use crate::output::{print_json, print_rows, OutputOptions};
@@ -182,7 +182,7 @@ struct OpenNoteCommand {
 pub async fn handle(
     command: NotesCommand,
     api_key_override: Option<String>,
-    write_through_cache: bool,
+    cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let cache_store = cache::OsCacheStore;
@@ -196,16 +196,16 @@ pub async fn handle(
             let client = GranolaClient::new(api_key)?;
             match command {
                 NotesSubcommand::List(command) => {
-                    list_notes(&client, &cache_store, command, write_through_cache, output).await
+                    list_notes(&client, &cache_store, command, cache_mode.write, output).await
                 }
                 NotesSubcommand::Get(command) => {
-                    get_note(&client, &cache_store, command, write_through_cache, output).await
+                    get_note(&client, &cache_store, command, cache_mode, output).await
                 }
                 NotesSubcommand::Hydrate(command) => {
-                    hydrate_notes(&client, &cache_store, command, write_through_cache, output).await
+                    hydrate_notes(&client, &cache_store, command, cache_mode, output).await
                 }
                 NotesSubcommand::Open(command) => {
-                    open_note(&client, &cache_store, command, write_through_cache, output).await
+                    open_note(&client, &cache_store, command, cache_mode, output).await
                 }
                 NotesSubcommand::Search(_) => unreachable!(),
             }
@@ -357,16 +357,24 @@ async fn hydrate_notes(
     client: &impl GranolaApi,
     cache_store: &impl CacheStore,
     command: HydrateNotesCommand,
-    write_through_cache: bool,
+    cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let ids = hydrate_note_ids(client, &command).await?;
     let mut notes = Vec::with_capacity(ids.len());
 
     for id in ids {
-        notes.push(client.get_note(&id, command.include_transcript).await?);
+        notes.push(
+            get_note_with_cache(
+                client,
+                cache_store,
+                &id,
+                command.include_transcript,
+                cache_mode,
+            )
+            .await?,
+        );
     }
-    cache_notes_if_enabled(cache_store, &notes, write_through_cache)?;
     redact_notes(&mut notes, &command.redact);
 
     if command.jsonl {
@@ -512,17 +520,19 @@ async fn get_note(
     client: &impl GranolaApi,
     cache_store: &impl CacheStore,
     command: GetNoteCommand,
-    write_through_cache: bool,
+    cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let include_transcript = command.include.as_deref() == Some("transcript");
     let note_id = normalize_note_id(&command.note_id)?;
-    let mut note = client.get_note(&note_id, include_transcript).await?;
-    cache_notes_if_enabled(
+    let mut note = get_note_with_cache(
+        client,
         cache_store,
-        std::slice::from_ref(&note),
-        write_through_cache,
-    )?;
+        &note_id,
+        include_transcript,
+        cache_mode,
+    )
+    .await?;
     redact_note(&mut note, &command.redact);
 
     if output.is_json() {
@@ -533,20 +543,38 @@ async fn get_note(
     Ok(())
 }
 
+async fn get_note_with_cache(
+    client: &impl GranolaApi,
+    cache_store: &impl CacheStore,
+    note_id: &str,
+    include_transcript: bool,
+    cache_mode: CacheMode,
+) -> Result<Note, CliError> {
+    if cache_mode.read {
+        if let Some(mut note) = cache_store.get_note(note_id)? {
+            if !include_transcript || note.transcript.is_some() {
+                if !include_transcript {
+                    note.transcript = None;
+                }
+                return Ok(note);
+            }
+        }
+    }
+
+    let note = client.get_note(note_id, include_transcript).await?;
+    cache_notes_if_enabled(cache_store, std::slice::from_ref(&note), cache_mode.write)?;
+    Ok(note)
+}
+
 async fn open_note(
     client: &impl GranolaApi,
     cache_store: &impl CacheStore,
     command: OpenNoteCommand,
-    write_through_cache: bool,
+    cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
     let note_id = normalize_note_id(&command.note_id)?;
-    let note = client.get_note(&note_id, false).await?;
-    cache_notes_if_enabled(
-        cache_store,
-        std::slice::from_ref(&note),
-        write_through_cache,
-    )?;
+    let note = get_note_with_cache(client, cache_store, &note_id, false, cache_mode).await?;
 
     if command.print {
         if output.is_json() {
@@ -957,6 +985,65 @@ mod tests {
         assert!(cache.summary_ids.lock().unwrap().is_empty());
     }
 
+    #[tokio::test]
+    async fn get_note_with_cache_uses_complete_cached_note() {
+        let mut note = fixture_note_with_transcript();
+        note.id = "not_cached".to_string();
+        let cache = RecordingCache::with_note(note.clone());
+        let api = FakeApi::default();
+
+        let result =
+            get_note_with_cache(&api, &cache, "not_cached", true, CacheMode::new(true, true))
+                .await
+                .unwrap();
+
+        assert_eq!(result.id, "not_cached");
+        assert!(result.transcript.is_some());
+        assert!(api.get_note_requests.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_note_with_cache_fetches_when_transcript_missing() {
+        let mut cached = fixture_note_without_transcript();
+        cached.id = "not_cached".to_string();
+        let mut remote = fixture_note_with_transcript();
+        remote.id = "not_cached".to_string();
+        let cache = RecordingCache::with_note(cached);
+        let api = FakeApi::with_notes(vec![remote]);
+
+        let result =
+            get_note_with_cache(&api, &cache, "not_cached", true, CacheMode::new(true, true))
+                .await
+                .unwrap();
+
+        assert!(result.transcript.is_some());
+        assert_eq!(api.get_note_requests.lock().unwrap().as_slice(), &[true]);
+        assert_eq!(cache.note_ids.lock().unwrap().as_slice(), &["not_cached"]);
+    }
+
+    #[tokio::test]
+    async fn get_note_with_cache_skips_reading_when_disabled() {
+        let mut cached = fixture_note_with_transcript();
+        cached.id = "not_cached".to_string();
+        let mut remote = fixture_note_without_transcript();
+        remote.id = "not_remote".to_string();
+        let cache = RecordingCache::with_note(cached);
+        let api = FakeApi::with_notes(vec![remote]);
+
+        let result = get_note_with_cache(
+            &api,
+            &cache,
+            "not_cached",
+            false,
+            CacheMode::new(false, true),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.id, "not_remote");
+        assert_eq!(api.get_note_requests.lock().unwrap().as_slice(), &[false]);
+    }
+
     fn note_summary(id: &str, title: &str, created_at: &str) -> NoteSummary {
         NoteSummary {
             id: id.to_string(),
@@ -971,10 +1058,23 @@ mod tests {
         }
     }
 
+    fn fixture_note_without_transcript() -> Note {
+        serde_json::from_str(include_str!("../../tests/fixtures/get_note.json")).unwrap()
+    }
+
+    fn fixture_note_with_transcript() -> Note {
+        serde_json::from_str(include_str!(
+            "../../tests/fixtures/get_note_with_transcript.json"
+        ))
+        .unwrap()
+    }
+
     #[derive(Default)]
     struct FakeApi {
         note_pages: Mutex<VecDeque<ListNotesResponse>>,
         list_note_params: Mutex<Vec<ListNotesParams>>,
+        notes: Mutex<VecDeque<Note>>,
+        get_note_requests: Mutex<Vec<bool>>,
     }
 
     impl FakeApi {
@@ -982,6 +1082,15 @@ mod tests {
             Self {
                 note_pages: Mutex::new(pages.into()),
                 list_note_params: Mutex::new(Vec::new()),
+                notes: Mutex::new(VecDeque::new()),
+                get_note_requests: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn with_notes(notes: Vec<Note>) -> Self {
+            Self {
+                notes: Mutex::new(notes.into()),
+                ..Default::default()
             }
         }
     }
@@ -1002,9 +1111,17 @@ mod tests {
         async fn get_note(
             &self,
             _note_id: &str,
-            _include_transcript: bool,
+            include_transcript: bool,
         ) -> Result<Note, CliError> {
-            Err(CliError::general("unexpected get_note call"))
+            self.get_note_requests
+                .lock()
+                .unwrap()
+                .push(include_transcript);
+            self.notes
+                .lock()
+                .unwrap()
+                .pop_front()
+                .ok_or_else(|| CliError::general("unexpected get_note call"))
         }
 
         async fn list_folders(
@@ -1018,6 +1135,17 @@ mod tests {
     #[derive(Default)]
     struct RecordingCache {
         summary_ids: Mutex<Vec<String>>,
+        note_ids: Mutex<Vec<String>>,
+        note: Mutex<Option<Note>>,
+    }
+
+    impl RecordingCache {
+        fn with_note(note: Note) -> Self {
+            Self {
+                note: Mutex::new(Some(note)),
+                ..Default::default()
+            }
+        }
     }
 
     impl CacheStore for RecordingCache {
@@ -1029,8 +1157,21 @@ mod tests {
             Ok(())
         }
 
-        fn upsert_notes(&self, _notes: &[Note]) -> Result<(), CliError> {
+        fn upsert_notes(&self, notes: &[Note]) -> Result<(), CliError> {
+            self.note_ids
+                .lock()
+                .unwrap()
+                .extend(notes.iter().map(|note| note.id.clone()));
             Ok(())
+        }
+
+        fn get_note(&self, note_id: &str) -> Result<Option<Note>, CliError> {
+            Ok(self
+                .note
+                .lock()
+                .unwrap()
+                .clone()
+                .filter(|note| note.id == note_id))
         }
 
         fn status(&self) -> Result<cache::CacheStatus, CliError> {
