@@ -19,9 +19,19 @@ granola notes list --since 7d --sort updated-at --order desc
 granola recent
 granola last --include-transcript
 
-# Get a note by ID or copied Granola URL, including transcript, as compact JSON.
-granola notes get not_1d3tmYTlCICgjy --include-transcript --output json-compact
+# Get a note by ID or copied Granola URL. Fields that need transcript data fetch it automatically.
+granola notes get not_1d3tmYTlCICgjy --fields transcript
+granola notes get not_1d3tmYTlCICgjy --fields id,title,summary,transcript --output json-compact
+granola notes get not_1d3tmYTlCICgjy --output json-compact
 granola notes get https://app.granola.ai/notes/not_1d3tmYTlCICgjy
+
+# Pipe a searched note ID into get. A single requested field defaults to text output.
+granola notes search secret surelock --since 1d --fields id --limit 1 | granola notes get --fields summary
+granola notes search secret surelock --fields id --output text --limit 1 | granola notes get --fields transcript
+
+# Discover available note fields for humans or agents.
+granola notes fields
+granola notes fields get --output json-compact
 
 # Get many full note records for agents.
 granola notes get-many --since 7d --include-transcript --jsonl
@@ -112,7 +122,8 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola auth status [--validate]`
 - `granola api get /v1/notes --query page_size=5`
 - `granola notes list [--created-before DATE] [--created-after DATE|--since 7d] [--updated-after DATE|--updated-since 24h] [--sort created-at|updated-at|title] [--order asc|desc] [--no-truncate]`
-- `granola notes get NOTE_ID_OR_URL [--include-transcript]`
+- `granola notes get [NOTE_ID_OR_URL] [--fields id,title,summary,transcript,full,...]` (if the ID is omitted, reads one piped ID/URL from stdin; transcript fields fetch transcript data automatically)
+- `granola notes fields [list|search|get]`
 - `granola notes get-many [NOTE_ID_OR_URL ... | --notes-file FILE | --stdin | list filters] [--include-transcript] [--jsonl]`
 - `granola notes open NOTE_ID_OR_URL [--print]`
 - `granola folders list [--cursor CURSOR] [--page-size N] [--all] [--limit N]`
@@ -127,7 +138,7 @@ See [Hosted Downloads](docs/downloads.md).
 - `granola context [NOTE_ID_OR_URL ... | --notes-file FILE | --stdin | list filters] [--include-transcript] [--format markdown|json] [--max-bytes N] [-o FILE]`
 - `granola watch [--since 2h] [--updated-since 30m] [--folder-id FOL_ID] [--interval-seconds 60] [--iterations N] [--include-existing]`
 
-Redaction flags are available on note detail, get-many, export, and context commands with `--redact emails,phones,secrets,attendees`.
+Redaction flags are available on search, note detail, get-many, export, and context commands with `--redact emails,phones,secrets,attendees`.
 Batch full-note commands such as `notes get-many` and `context` require an explicit selector: note IDs/URLs, `--notes-file`, `--stdin`, a list filter, or `--all`.
 - `granola config show|path|set KEY VALUE`
 - `granola completions zsh|bash|fish|powershell|elvish`
@@ -138,8 +149,8 @@ Batch full-note commands such as `notes get-many` and `context` require an expli
 
 Global scriptability flags:
 
-- `--output table|list|json|json-compact|json-pretty` (the default output automatically falls back from table to list-style blocks when it exceeds terminal width; explicit `--output table` is always respected)
-- `--fields a,b,c`
+- `--output table|text|list|json|json-compact|json-pretty` (the default output is `text` when exactly one field is requested and `table` otherwise; table output automatically falls back to list-style blocks when it exceeds terminal width; explicit `--output table` is always respected)
+- `--fields a,b,c` (JSON field projection; for table/list row commands, a single field such as `--fields id` prints plain values, which is useful for pipelines)
 - `--quiet`
 - `--api-key KEY` for process-local auth override only
 - `--profile NAME` to apply non-secret defaults from config

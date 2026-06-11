@@ -168,8 +168,7 @@ fn list_views(output: &OutputOptions) -> Result<(), CliError> {
             })
             .collect(),
         output,
-    );
-    Ok(())
+    )
 }
 
 fn show_view(name: &str, output: &OutputOptions) -> Result<(), CliError> {
@@ -237,7 +236,7 @@ async fn run_view(
             output,
         );
     }
-    print_note_table(&notes, output);
+    print_note_table(&notes, output)?;
     Ok(())
 }
 
@@ -283,8 +282,7 @@ fn run_search_view(
             })
             .collect(),
         output,
-    );
-    Ok(())
+    )
 }
 
 async fn collect_view_notes(
@@ -397,10 +395,13 @@ fn sort_notes(notes: &mut [NoteSummary], sort: Option<&str>, order: Option<&str>
     });
 }
 
-fn print_note_table(notes: &[NoteSummary], output: &OutputOptions) {
+fn print_note_table(notes: &[NoteSummary], output: &OutputOptions) -> Result<(), CliError> {
     if notes.is_empty() {
+        if !output.fields.is_empty() {
+            return Ok(());
+        }
         println!("No notes found");
-        return;
+        return Ok(());
     }
     print_rows(
         &["id", "title", "owner", "updated_at"],
@@ -416,7 +417,7 @@ fn print_note_table(notes: &[NoteSummary], output: &OutputOptions) {
             })
             .collect(),
         output,
-    );
+    )
 }
 
 fn sort_name(sort: NoteSortField) -> String {

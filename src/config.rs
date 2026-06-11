@@ -76,12 +76,13 @@ impl ConfigProfile {
         match self.output.as_deref() {
             None => Ok(None),
             Some("table") => Ok(Some(OutputFormat::Table)),
+            Some("text") => Ok(Some(OutputFormat::Text)),
             Some("list") => Ok(Some(OutputFormat::List)),
             Some("json") => Ok(Some(OutputFormat::Json)),
             Some("json-compact") => Ok(Some(OutputFormat::JsonCompact)),
             Some("json-pretty") => Ok(Some(OutputFormat::JsonPretty)),
             Some(other) => Err(CliError::invalid_input(format!(
-                "invalid configured output '{other}'; use table, list, json, json-compact, or json-pretty"
+                "invalid configured output '{other}'; use table, text, list, json, json-compact, or json-pretty"
             ))),
         }
     }

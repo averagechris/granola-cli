@@ -6,13 +6,14 @@ use crate::cache::{self, CacheMode, CacheStore};
 use crate::error::CliError;
 use crate::note_ref::normalize_note_id;
 use crate::output::{print_json, print_rows, OutputOptions};
-use crate::redaction::{redact_note, redact_notes, RedactionKind};
+use crate::redaction::{redact_note, redact_note_summary, redact_notes, RedactionKind};
 use crate::types::{Note, NoteSummary};
 use chrono::{Duration, SecondsFormat, Utc};
 use clap::{Args, Subcommand, ValueEnum};
-use serde_json::json;
+use serde::Serialize;
+use serde_json::{json, Value};
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, IsTerminal, Read};
 use std::path::PathBuf;
 
 #[derive(Debug, Args)]
@@ -32,6 +33,8 @@ enum NotesSubcommand {
     GetMany(GetManyNotesCommand),
     /// Search the local note cache, not the Granola API.
     Search(SearchNotesCommand),
+    /// List fields available for note output and pipelines.
+    Fields(FieldsNotesCommand),
     /// Open a note in the browser.
     Open(OpenNoteCommand),
 }
@@ -94,12 +97,9 @@ enum SortOrder {
 
 #[derive(Debug, Args)]
 struct GetNoteCommand {
-    /// Granola note ID or copied Granola note URL.
+    /// Granola note ID or copied Granola note URL. If omitted and stdin is piped, reads one ID/URL from stdin.
     #[arg(value_name = "NOTE_ID_OR_URL")]
-    note_id: String,
-    /// Include the transcript in the response.
-    #[arg(long)]
-    include_transcript: bool,
+    note_id: Option<String>,
     /// Redact sensitive data in output. Repeat or comma-separate values: emails, phones, secrets, attendees.
     #[arg(long, value_enum, value_delimiter = ',')]
     redact: Vec<RedactionKind>,
@@ -161,7 +161,7 @@ struct GetManyNotesCommand {
 #[command(
     about = "Search the local note cache, not the Granola API.",
     long_about = "Search the local SQLite cache, not the Granola API. Run `granola sync --since 30d --all --include-transcript` first, especially for transcript search. Supports SQLite FTS5 syntax such as field filters and phrases. Examples: `granola notes search apple`, `granola notes search attendees:will async config`, `granola notes search attendees:will \"async config\"`, `granola notes search transcript:renewal`.",
-    after_help = "Tip: run `granola sync --since 30d --all --include-transcript` first. Transcript search only covers notes cached with transcripts."
+    after_help = "Tip: run `granola sync --since 30d --all --include-transcript` first. Transcript search only covers notes cached with transcripts.\n\nPipeline examples:\n  granola notes search renewal --fields id --limit 1 | granola notes get --fields summary\n  granola notes search renewal --fields id --output text --limit 1 | granola notes get --fields transcript\n  granola notes search renewal --fields id | granola notes get-many --stdin --jsonl"
 )]
 struct SearchNotesCommand {
     /// Read additional search query text from stdin. If QUERY is omitted and stdin is piped, stdin is read automatically.
@@ -173,6 +173,39 @@ struct SearchNotesCommand {
     /// Maximum number of cached notes to return.
     #[arg(long)]
     limit: Option<usize>,
+    /// Return cached notes created within a relative duration, e.g. 7d, 24h, 30m.
+    #[arg(long, conflicts_with = "created_after")]
+    since: Option<String>,
+    /// Return cached notes created after this date or date-time.
+    #[arg(long, conflicts_with = "since")]
+    created_after: Option<String>,
+    /// Return cached notes updated within a relative duration, e.g. 7d, 24h, 30m.
+    #[arg(long, conflicts_with = "updated_after")]
+    updated_since: Option<String>,
+    /// Return cached notes updated after this date or date-time.
+    #[arg(long, conflicts_with = "updated_since")]
+    updated_after: Option<String>,
+    /// Redact sensitive data in output. Repeat or comma-separate values: emails, phones, secrets, attendees.
+    #[arg(long, value_enum, value_delimiter = ',')]
+    redact: Vec<RedactionKind>,
+}
+
+#[derive(Debug, Args)]
+#[command(
+    about = "List fields available for note output and pipelines.",
+    long_about = "List fields accepted by note commands such as `granola notes get --fields summary` and `granola notes search --fields id`. Use `--output json` for machine-readable field metadata."
+)]
+struct FieldsNotesCommand {
+    /// Limit fields to one notes command.
+    #[arg(value_enum)]
+    command: Option<NoteFieldsCommand>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum NoteFieldsCommand {
+    List,
+    Search,
+    Get,
 }
 
 #[derive(Debug, Args)]
@@ -197,6 +230,7 @@ pub async fn handle(
             let warning_client = warning_client(api_key_override);
             search_notes(command, &cache_store, warning_client.as_ref(), output).await
         }
+        NotesSubcommand::Fields(command) => note_fields(command, output),
         command => {
             if let NotesSubcommand::GetMany(command) = &command {
                 require_note_selector(command, "get-many")?;
@@ -217,8 +251,196 @@ pub async fn handle(
                     open_note(&client, &cache_store, command, cache_mode, output).await
                 }
                 NotesSubcommand::Search(_) => unreachable!(),
+                NotesSubcommand::Fields(_) => unreachable!(),
             }
         }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct NoteFieldSpec {
+    pub(crate) name: &'static str,
+    pub(crate) commands: &'static [&'static str],
+    pub(crate) description: &'static str,
+    pub(crate) requires_transcript: bool,
+    pub(crate) json_only: bool,
+}
+
+pub(crate) fn note_field_specs() -> &'static [NoteFieldSpec] {
+    &[
+        NoteFieldSpec {
+            name: "id",
+            commands: &["list", "search", "get"],
+            description: "Granola note ID. Useful for pipelines into `notes get` or `notes get-many --stdin`.",
+            requires_transcript: false,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "title",
+            commands: &["list", "search", "get"],
+            description: "Note title.",
+            requires_transcript: false,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "owner",
+            commands: &["list", "search", "get"],
+            description: "Owner email in human/text output; owner object in JSON output.",
+            requires_transcript: false,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "owner.email",
+            commands: &["get"],
+            description: "Owner email address.",
+            requires_transcript: false,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "created_at",
+            commands: &["list", "search", "get"],
+            description: "Creation timestamp.",
+            requires_transcript: false,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "updated_at",
+            commands: &["list", "search", "get"],
+            description: "Last update timestamp.",
+            requires_transcript: false,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "cached",
+            commands: &["search"],
+            description: "Search-cache detail level: summary, full, or transcript.",
+            requires_transcript: false,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "url",
+            commands: &["get"],
+            description: "Granola web URL. Alias for web_url in human/text output.",
+            requires_transcript: false,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "web_url",
+            commands: &["get"],
+            description: "Granola web URL.",
+            requires_transcript: false,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "summary",
+            commands: &["search", "get"],
+            description: "Generated summary, preferring Markdown when available and falling back to plain summary text.",
+            requires_transcript: false,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "summary_text",
+            commands: &["search", "get"],
+            description: "Generated plain-text summary.",
+            requires_transcript: false,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "summary_markdown",
+            commands: &["search", "get"],
+            description: "Generated Markdown summary when available.",
+            requires_transcript: false,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "transcript",
+            commands: &["search", "get"],
+            description: "Transcript text in human/text output; raw transcript array in JSON output.",
+            requires_transcript: true,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "transcript_text",
+            commands: &["search", "get"],
+            description: "Rendered transcript text with speaker labels.",
+            requires_transcript: true,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "full",
+            commands: &["get"],
+            description: "Human-readable title, metadata, summary, and transcript text.",
+            requires_transcript: true,
+            json_only: false,
+        },
+        NoteFieldSpec {
+            name: "attendees",
+            commands: &["get"],
+            description: "Attendee objects. Available in JSON output.",
+            requires_transcript: false,
+            json_only: true,
+        },
+        NoteFieldSpec {
+            name: "calendar_event",
+            commands: &["get"],
+            description: "Calendar event object. Available in JSON output.",
+            requires_transcript: false,
+            json_only: true,
+        },
+        NoteFieldSpec {
+            name: "folder_membership",
+            commands: &["get"],
+            description: "Folder membership array. Available in JSON output.",
+            requires_transcript: false,
+            json_only: true,
+        },
+    ]
+}
+
+fn note_fields(command: FieldsNotesCommand, output: &OutputOptions) -> Result<(), CliError> {
+    let fields: Vec<&NoteFieldSpec> = note_field_specs()
+        .iter()
+        .filter(|field| {
+            command
+                .command
+                .is_none_or(|command| field.commands.contains(&note_fields_command_name(command)))
+        })
+        .collect();
+
+    if output.is_json() {
+        return print_json(&json!({ "fields": fields, "count": fields.len() }), output);
+    }
+
+    print_rows(
+        &[
+            "name",
+            "commands",
+            "requires_transcript",
+            "json_only",
+            "description",
+        ],
+        fields
+            .into_iter()
+            .map(|field| {
+                vec![
+                    field.name.to_string(),
+                    field.commands.join(","),
+                    field.requires_transcript.to_string(),
+                    field.json_only.to_string(),
+                    field.description.to_string(),
+                ]
+            })
+            .collect(),
+        output,
+    )?;
+    Ok(())
+}
+
+fn note_fields_command_name(command: NoteFieldsCommand) -> &'static str {
+    match command {
+        NoteFieldsCommand::List => "list",
+        NoteFieldsCommand::Search => "search",
+        NoteFieldsCommand::Get => "get",
     }
 }
 
@@ -246,7 +468,7 @@ async fn list_notes(
         );
     }
 
-    print_note_table(&result.notes, command.no_truncate, output);
+    print_note_table(&result.notes, command.no_truncate, output)?;
     Ok(())
 }
 
@@ -324,11 +546,13 @@ async fn search_notes(
 ) -> Result<(), CliError> {
     let query = super::resolve_search_query(&command.query, command.stdin)?;
     let status = cache_store.status()?;
-    let hits = cache_store.search(&query, command.limit)?.ok_or_else(|| {
+    let mut hits = cache_store.search(&query, search_cache_limit(&command))?.ok_or_else(|| {
         CliError::invalid_input(
             "no local cache found; `granola notes search` searches only local cached notes. Run `granola sync --since 30d --all --include-transcript` before searching transcripts",
         )
     })?;
+    filter_search_hits(&mut hits, &command)?;
+    redact_search_hits(&mut hits, &command.redact);
     let count = hits.len();
     let warning = search_cache_warning(&status, cache_store, warning_client).await?;
 
@@ -353,12 +577,69 @@ async fn search_notes(
         );
     }
 
-    print_search_result_table(&hits, &query, &status, output);
+    print_search_result_table(&hits, &query, &status, output)?;
     if let Some(warning) =
         warning.filter(|_| count == 0 || status.summaries > status.hydrated_notes)
     {
         eprintln!("hint: {warning}");
     }
+    Ok(())
+}
+
+fn redact_search_hits(hits: &mut [cache::CacheSearchHit], kinds: &[RedactionKind]) {
+    if kinds.is_empty() {
+        return;
+    }
+    for hit in hits {
+        redact_note_summary(&mut hit.summary, kinds);
+        if let Some(note) = &mut hit.note {
+            redact_note(note, kinds);
+        }
+    }
+}
+
+fn search_cache_limit(command: &SearchNotesCommand) -> Option<usize> {
+    if search_has_time_filter(command) {
+        None
+    } else {
+        command.limit
+    }
+}
+
+fn search_has_time_filter(command: &SearchNotesCommand) -> bool {
+    command.since.is_some()
+        || command.created_after.is_some()
+        || command.updated_since.is_some()
+        || command.updated_after.is_some()
+}
+
+fn filter_search_hits(
+    hits: &mut Vec<cache::CacheSearchHit>,
+    command: &SearchNotesCommand,
+) -> Result<(), CliError> {
+    let created_after = command
+        .since
+        .as_deref()
+        .map(relative_time_after)
+        .transpose()?
+        .or_else(|| command.created_after.clone());
+    let updated_after = command
+        .updated_since
+        .as_deref()
+        .map(relative_time_after)
+        .transpose()?
+        .or_else(|| command.updated_after.clone());
+
+    if let Some(created_after) = created_after {
+        hits.retain(|hit| hit.summary.created_at.as_str() >= created_after.as_str());
+    }
+    if let Some(updated_after) = updated_after {
+        hits.retain(|hit| hit.summary.updated_at.as_str() >= updated_after.as_str());
+    }
+    if let Some(limit) = command.limit {
+        hits.truncate(limit);
+    }
+
     Ok(())
 }
 
@@ -397,7 +678,7 @@ async fn hydrate_notes(
         return print_json(&json!({ "notes": notes, "count": notes.len() }), output);
     }
 
-    print_hydrated_note_table(&notes, output);
+    print_hydrated_note_table(&notes, output)?;
     Ok(())
 }
 
@@ -551,8 +832,9 @@ async fn get_note(
     cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
-    let include_transcript = command.include_transcript;
-    let note_id = normalize_note_id(&command.note_id)?;
+    let include_transcript = note_fields_require_transcript(&output.fields)
+        || (output.is_json() && output.fields.is_empty());
+    let note_id = resolve_get_note_id(command.note_id.as_deref())?;
     let mut note = get_note_with_cache(
         client,
         cache_store,
@@ -564,11 +846,118 @@ async fn get_note(
     redact_note(&mut note, &command.redact);
 
     if output.is_json() {
-        return print_json(&note, output);
+        return print_json(&note_json_value(&note), output);
+    }
+
+    if !output.fields.is_empty() {
+        print_note_fields(&note, output)?;
+        return Ok(());
     }
 
     print_note_detail(&note);
     Ok(())
+}
+
+fn note_fields_require_transcript(fields: &[String]) -> bool {
+    fields.iter().any(|field| {
+        matches!(
+            note_field_name(field),
+            "transcript" | "transcript_text" | "full"
+        )
+    })
+}
+
+fn note_json_value(note: &Note) -> Value {
+    let mut value = serde_json::to_value(note).unwrap_or_else(|_| json!({}));
+    if let Value::Object(map) = &mut value {
+        map.insert("summary".to_string(), json!(render_note_summary(note)));
+        map.insert(
+            "transcript_text".to_string(),
+            json!(render_transcript(note)),
+        );
+        map.insert("full".to_string(), json!(render_note_full(note)));
+    }
+    value
+}
+
+fn print_note_fields(note: &Note, output: &OutputOptions) -> Result<(), CliError> {
+    let mut headers = Vec::new();
+    let mut values = Vec::new();
+
+    for field in &output.fields {
+        let name = note_field_name(field);
+        if let Some(value) = render_note_field(note, name) {
+            headers.push(field.to_string());
+            values.push(value);
+        } else {
+            let available: Vec<&str> = note_field_specs()
+                .iter()
+                .filter(|field| field.commands.contains(&"get") && !field.json_only)
+                .map(|field| field.name)
+                .collect();
+            return Err(CliError::invalid_input(format!(
+                "unknown field '{name}'; available fields: {}",
+                available.join(", ")
+            )));
+        }
+    }
+
+    if headers.is_empty() {
+        return Ok(());
+    }
+
+    let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
+    print_rows(&header_refs, vec![values], output)
+}
+
+fn note_field_name(field: &str) -> &str {
+    field.trim()
+}
+
+fn render_note_field(note: &Note, field: &str) -> Option<String> {
+    match field {
+        "id" => Some(note.id.clone()),
+        "object" => Some(note.object.clone()),
+        "title" => Some(note.title.as_deref().unwrap_or("").to_string()),
+        "owner" | "owner.email" => Some(note.owner.email.clone()),
+        "created_at" => Some(note.created_at.clone()),
+        "updated_at" => Some(note.updated_at.clone()),
+        "url" | "web_url" => Some(note.web_url.clone()),
+        "summary" => Some(render_note_summary(note)),
+        "summary_text" => Some(note.summary_text.clone()),
+        "summary_markdown" => Some(note.summary_markdown.clone().unwrap_or_default()),
+        "transcript" | "transcript_text" => Some(render_transcript(note)),
+        "full" => Some(render_note_full(note)),
+        _ => None,
+    }
+}
+
+fn resolve_get_note_id(note_id: Option<&str>) -> Result<String, CliError> {
+    if let Some(note_id) = note_id {
+        return normalize_note_id(note_id);
+    }
+
+    if io::stdin().is_terminal() {
+        return Err(CliError::invalid_input(
+            "provide NOTE_ID_OR_URL or pipe one note ID/URL on stdin",
+        ));
+    }
+
+    let mut content = String::new();
+    io::stdin().read_to_string(&mut content).map_err(|error| {
+        CliError::general(format!("failed to read note ID from stdin: {error}"))
+    })?;
+    let ids: Vec<String> = parse_ids(&content).collect();
+
+    match ids.as_slice() {
+        [id] => normalize_note_id(id),
+        [] => Err(CliError::invalid_input(
+            "provide NOTE_ID_OR_URL or pipe one note ID/URL on stdin",
+        )),
+        _ => Err(CliError::invalid_input(
+            "`granola notes get` accepts one note ID; use `granola notes get-many --stdin` for multiple IDs",
+        )),
+    }
 }
 
 async fn get_note_with_cache(
@@ -703,7 +1092,11 @@ struct NoteRow {
     updated_at: String,
 }
 
-fn print_note_table(notes: &[NoteSummary], no_truncate: bool, output: &OutputOptions) {
+fn print_note_table(
+    notes: &[NoteSummary],
+    no_truncate: bool,
+    output: &OutputOptions,
+) -> Result<(), CliError> {
     let rows: Vec<NoteRow> = notes
         .iter()
         .map(|note| NoteRow {
@@ -716,6 +1109,9 @@ fn print_note_table(notes: &[NoteSummary], no_truncate: bool, output: &OutputOpt
         .collect();
 
     if rows.is_empty() {
+        if !output.fields.is_empty() {
+            return Ok(());
+        }
         println!("No notes found");
     } else {
         print_rows(
@@ -724,14 +1120,18 @@ fn print_note_table(notes: &[NoteSummary], no_truncate: bool, output: &OutputOpt
                 .map(|row| vec![row.id, row.title, row.owner, row.created_at, row.updated_at])
                 .collect(),
             output,
-        );
+        )?;
     }
+    Ok(())
 }
 
-fn print_hydrated_note_table(notes: &[Note], output: &OutputOptions) {
+fn print_hydrated_note_table(notes: &[Note], output: &OutputOptions) -> Result<(), CliError> {
     if notes.is_empty() {
+        if !output.fields.is_empty() {
+            return Ok(());
+        }
         println!("No notes found");
-        return;
+        return Ok(());
     }
 
     print_rows(
@@ -749,7 +1149,7 @@ fn print_hydrated_note_table(notes: &[Note], output: &OutputOptions) {
             })
             .collect(),
         output,
-    );
+    )
 }
 
 fn print_search_result_table(
@@ -757,10 +1157,17 @@ fn print_search_result_table(
     query: &str,
     status: &cache::CacheStatus,
     output: &OutputOptions,
-) {
+) -> Result<(), CliError> {
     if hits.is_empty() {
+        if !output.fields.is_empty() {
+            return Ok(());
+        }
         print_no_search_hits(query, status);
-        return;
+        return Ok(());
+    }
+
+    if !output.fields.is_empty() {
+        return print_search_result_fields(hits, output);
     }
 
     print_rows(
@@ -777,7 +1184,79 @@ fn print_search_result_table(
             })
             .collect(),
         output,
-    );
+    )
+}
+
+fn print_search_result_fields(
+    hits: &[cache::CacheSearchHit],
+    output: &OutputOptions,
+) -> Result<(), CliError> {
+    let mut headers = Vec::new();
+    for field in &output.fields {
+        let name = field.trim();
+        if !search_field_available(name) {
+            let available: Vec<&str> = note_field_specs()
+                .iter()
+                .filter(|field| field.commands.contains(&"search") && !field.json_only)
+                .map(|field| field.name)
+                .collect();
+            return Err(CliError::invalid_input(format!(
+                "unknown field '{name}'; available fields: {}",
+                available.join(", ")
+            )));
+        }
+        headers.push(name.to_string());
+    }
+
+    let rows = hits
+        .iter()
+        .map(|hit| {
+            headers
+                .iter()
+                .map(|field| render_search_hit_field(hit, field))
+                .collect()
+        })
+        .collect();
+    let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
+    let mut row_output = output.clone();
+    row_output.fields.clear();
+    print_rows(&header_refs, rows, &row_output)
+}
+
+fn search_field_available(field: &str) -> bool {
+    note_field_specs()
+        .iter()
+        .any(|spec| spec.commands.contains(&"search") && !spec.json_only && spec.name == field)
+}
+
+fn render_search_hit_field(hit: &cache::CacheSearchHit, field: &str) -> String {
+    match field {
+        "id" => hit.summary.id.clone(),
+        "title" => hit.summary.title.as_deref().unwrap_or("").to_string(),
+        "owner" => hit.summary.owner.email.clone(),
+        "created_at" => hit.summary.created_at.clone(),
+        "updated_at" => hit.summary.updated_at.clone(),
+        "cached" => cached_label(hit),
+        "summary" => hit
+            .note
+            .as_ref()
+            .map(render_note_summary)
+            .unwrap_or_default(),
+        "summary_text" => hit
+            .note
+            .as_ref()
+            .map(|note| note.summary_text.clone())
+            .unwrap_or_default(),
+        "summary_markdown" => hit
+            .note
+            .as_ref()
+            .and_then(|note| note.summary_markdown.clone())
+            .unwrap_or_default(),
+        "transcript" | "transcript_text" => {
+            hit.note.as_ref().map(render_transcript).unwrap_or_default()
+        }
+        _ => String::new(),
+    }
 }
 
 fn print_no_search_hits(query: &str, status: &cache::CacheStatus) {
@@ -871,16 +1350,52 @@ fn print_note_detail(note: &Note) {
     println!("url: {}", note.web_url);
     println!();
 
-    if let Some(markdown) = note.summary_markdown.as_deref() {
-        println!("{markdown}");
-    } else {
-        println!("{}", note.summary_text);
-    }
+    println!("{}", render_note_summary(note));
 
     if let Some(transcript) = &note.transcript {
         println!();
         println!("Transcript items: {}", transcript.len());
     }
+}
+
+fn render_note_summary(note: &Note) -> String {
+    note.summary_markdown
+        .clone()
+        .unwrap_or_else(|| note.summary_text.clone())
+}
+
+fn render_note_full(note: &Note) -> String {
+    let mut out = String::new();
+    out.push_str(note.title.as_deref().unwrap_or("Untitled note"));
+    out.push('\n');
+    out.push_str(&format!("id: {}\n", note.id));
+    out.push_str(&format!("owner: {}\n", note.owner.email));
+    out.push_str(&format!("created: {}\n", note.created_at));
+    out.push_str(&format!("updated: {}\n", note.updated_at));
+    out.push_str(&format!("url: {}\n\n", note.web_url));
+    out.push_str(&render_note_summary(note));
+    out.push_str("\n\n");
+    out.push_str(&render_transcript(note));
+    out
+}
+
+fn render_transcript(note: &Note) -> String {
+    let Some(transcript) = &note.transcript else {
+        return "No transcript available".to_string();
+    };
+
+    transcript
+        .iter()
+        .map(|item| {
+            let speaker = item
+                .speaker
+                .diarization_label
+                .as_deref()
+                .unwrap_or(item.speaker.source.as_str());
+            format!("{speaker}: {}", item.text)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]
@@ -898,6 +1413,41 @@ mod tests {
         assert!(relative_time_after("30m").is_ok());
         assert!(relative_time_after("0d").is_err());
         assert!(relative_time_after("7w").is_err());
+    }
+
+    #[test]
+    fn resolves_get_note_id_from_argument() {
+        assert_eq!(
+            resolve_get_note_id(Some("https://notes.granola.ai/d/not_123")).unwrap(),
+            "not_123"
+        );
+    }
+
+    #[test]
+    fn transcript_fields_imply_transcript_fetch() {
+        assert!(note_fields_require_transcript(&["transcript".to_string()]));
+        assert!(note_fields_require_transcript(&[
+            "transcript_text".to_string()
+        ]));
+        assert!(note_fields_require_transcript(&["full".to_string()]));
+        assert!(!note_fields_require_transcript(&["summary".to_string()]));
+    }
+
+    #[test]
+    fn renders_semantic_note_fields() {
+        let note = fixture_note_with_transcript();
+
+        assert_eq!(
+            render_note_field(&note, "id").as_deref(),
+            Some(note.id.as_str())
+        );
+        assert_eq!(
+            render_note_field(&note, "summary").as_deref(),
+            Some("# Redacted Summary\n\n- Redacted bullet")
+        );
+        assert!(render_note_field(&note, "transcript")
+            .unwrap()
+            .contains("Speaker A: Redacted transcript text."));
     }
 
     #[test]

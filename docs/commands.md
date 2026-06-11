@@ -2,8 +2,8 @@
 
 Global flags available on every command:
 
-- `--output table|list|json|json-compact|json-pretty`
-- `--fields a,b,c`
+- `--output table|text|list|json|json-compact|json-pretty`
+- `--fields a,b,c` (JSON field projection; a single field on row output prints plain values for pipelines)
 - `--quiet`
 - `--api-key KEY` for one process only
 - `--profile NAME`
@@ -45,10 +45,11 @@ granola notes list \
   [--order asc|desc] \
   [--no-truncate]
 
-granola notes get NOTE_ID_OR_URL [--include-transcript]
+granola notes get [NOTE_ID_OR_URL] [--fields id,title,summary,transcript,full,...]
 granola notes get-many [NOTE_ID_OR_URL ...] [--notes-file FILE] [--stdin] [--include-transcript] [--jsonl]
 granola notes get-many [list filters] [--include-transcript] [--jsonl]
-granola notes search [--stdin] [QUERY ...] [--limit N]
+granola notes search [--stdin] [QUERY ...] [--limit N] [--since 7d] [--created-after DATE] [--updated-since 24h] [--updated-after DATE]
+granola notes fields [list|search|get]
 granola notes open NOTE_ID_OR_URL [--print]
 ```
 
@@ -61,9 +62,12 @@ granola notes search apple
 granola notes search attendees:will "async config"
 granola notes search transcript:renewal
 printf 'attendees:will "async config"' | granola notes search
+granola notes search secret surelock --since 1d --fields id --output text --limit 1 | granola notes get --fields transcript
 ```
 
-`notes search` searches only the local cache; it is not backed by a remote Granola API search endpoint. Run `granola sync --since 30d --all --include-transcript` first, especially before searching transcripts.
+`notes search` searches only the local cache; it is not backed by a remote Granola API search endpoint. Run `granola sync --since 30d --all --include-transcript` first, especially before searching transcripts. `notes get --fields transcript` fetches transcript data automatically when the cache does not already have it.
+
+Discover available fields with `granola notes fields` for humans or `granola notes fields get --output json-compact` for agents.
 
 `notes get-many` requires an explicit selector: note IDs/URLs, `--notes-file`, `--stdin`, a filter such as `--since 7d` or `--folder-id FOL_ID`, or `--all`.
 
@@ -138,6 +142,6 @@ granola completions zsh|bash|fish|powershell|elvish
 granola completions install zsh|bash|fish|powershell|elvish
 ```
 
-Commands that print or write full note content support privacy redaction with repeated or comma-separated `--redact emails,phones,secrets,attendees` values.
+Commands that print or write note content, including cached search result fields, support privacy redaction with repeated or comma-separated `--redact emails,phones,secrets,attendees` values.
 
 `context` also requires an explicit note selector: note IDs/URLs, `--notes-file`, `--stdin`, a list filter, or `--all`.

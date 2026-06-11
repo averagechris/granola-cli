@@ -1,4 +1,4 @@
-use crate::types::{CalendarEvent, Note, User};
+use crate::types::{CalendarEvent, Note, NoteSummary, User};
 use clap::ValueEnum;
 use regex::Regex;
 use std::sync::OnceLock;
@@ -39,6 +39,16 @@ pub fn redact_note(note: &mut Note, kinds: &[RedactionKind]) {
 pub fn redact_notes(notes: &mut [Note], kinds: &[RedactionKind]) {
     for note in notes {
         redact_note(note, kinds);
+    }
+}
+
+pub fn redact_note_summary(summary: &mut NoteSummary, kinds: &[RedactionKind]) {
+    if kinds.is_empty() {
+        return;
+    }
+    redact_user(&mut summary.owner, kinds);
+    if let Some(title) = &mut summary.title {
+        redact_string(title, kinds);
     }
 }
 

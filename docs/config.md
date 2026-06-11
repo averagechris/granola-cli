@@ -12,7 +12,7 @@ granola config path
 
 Supported keys:
 
-- `output`: `table`, `list`, `json`, `json-compact`, or `json-pretty`
+- `output`: `table`, `text`, `list`, `json`, `json-compact`, or `json-pretty`
 - `quiet`: `true` or `false`
 - `profile.NAME.output`, `profile.NAME.quiet`
 

@@ -116,6 +116,117 @@ fn search_supports_list_output() {
 }
 
 #[test]
+fn search_fields_id_emits_plain_ids_for_pipelines() {
+    let home = temp_home_with_cache();
+    seed_cache(home.path());
+
+    granola(home.path())
+        .args(["notes", "search", "mint", "--fields", "id", "--limit", "1"])
+        .assert()
+        .success()
+        .stdout("not_mint\n");
+}
+
+#[test]
+fn search_fields_can_emit_cached_summary_and_transcript_text() {
+    let home = temp_home_with_cache();
+    seed_cache(home.path());
+
+    granola(home.path())
+        .args([
+            "notes",
+            "search",
+            "async",
+            "--fields",
+            "id,summary_text,transcript",
+            "--output",
+            "text",
+            "--limit",
+            "1",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "not_async\tWe discussed async config rollout details.\tspeaker: mint alpha",
+        ));
+}
+
+#[test]
+fn search_redacts_selected_fields_and_json_payloads() {
+    let home = temp_home_with_cache();
+    seed_cache(home.path());
+
+    granola(home.path())
+        .args([
+            "notes",
+            "search",
+            "async",
+            "--fields",
+            "id,owner,summary_text",
+            "--redact",
+            "emails",
+            "--output",
+            "text",
+            "--limit",
+            "1",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("not_async\t[redacted email]\t"))
+        .stdout(predicate::str::contains("chris@example.com").not());
+
+    granola(home.path())
+        .args([
+            "notes",
+            "search",
+            "async",
+            "--redact",
+            "emails",
+            "--output",
+            "json-compact",
+            "--limit",
+            "1",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[redacted email]"))
+        .stdout(predicate::str::contains("chris@example.com").not());
+}
+
+#[test]
+fn unknown_search_field_errors() {
+    let home = temp_home_with_cache();
+    seed_cache(home.path());
+
+    granola(home.path())
+        .args([
+            "notes",
+            "search",
+            "mint",
+            "--fields",
+            "id,NODOESNTEXIST",
+            "--output",
+            "text",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown field 'NODOESNTEXIST'"))
+        .stderr(predicate::str::contains("available fields: id, title"));
+}
+
+#[test]
+fn search_supports_created_since_filter() {
+    let home = temp_home_with_cache();
+    seed_cache(home.path());
+
+    granola(home.path())
+        .args(["notes", "search", "mint", "--since", "1d", "--fields", "id"])
+        .assert()
+        .success()
+        .stdout("");
+}
+
+#[test]
 fn table_output_falls_back_to_list_when_terminal_is_narrow() {
     let home = temp_home_with_cache();
     seed_cache(home.path());
@@ -191,6 +302,38 @@ fn sync_help_uses_singular_include_transcript_flag() {
         .success()
         .stdout(predicate::str::contains("--include-transcript"))
         .stdout(predicate::str::contains("--include-transcripts").not());
+}
+
+#[test]
+fn notes_get_help_uses_fields_for_transcripts() {
+    let home = temp_home_with_cache();
+
+    granola(home.path())
+        .args(["notes", "get", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--fields"))
+        .stdout(predicate::str::contains("--include-transcript").not())
+        .stdout(predicate::str::contains("--view").not());
+}
+
+#[test]
+fn notes_fields_lists_human_and_json_metadata() {
+    let home = temp_home_with_cache();
+
+    granola(home.path())
+        .args(["notes", "fields", "get"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("summary"))
+        .stdout(predicate::str::contains("transcript"));
+
+    granola(home.path())
+        .args(["notes", "fields", "get", "--output", "json-compact"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"name\":\"transcript\""))
+        .stdout(predicate::str::contains("\"requires_transcript\":true"));
 }
 
 #[test]

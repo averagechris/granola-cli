@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- `notes get` now uses requested `--fields` to decide whether transcript data is needed; `--fields transcript` fetches transcript data automatically and `--output json` without fields returns the full note record.
+- Added `--output text` and default single-field row output to plain text for shell pipelines such as `notes search --fields id | notes get --fields summary`.
+- Added `granola notes fields [list|search|get]` so humans and agents can discover supported note fields.
+- `notes search` now supports `--redact emails,phones,secrets,attendees` for emitted metadata and cached content fields.
+
 ## v0.7.0 - 2026-06-11
 
 ### Changed

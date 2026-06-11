@@ -12,7 +12,7 @@ This CLI should be useful for humans and AI agents. `linear-cli` shows that stab
 
 Every data command should support:
 
-- `--output table|list|json|json-compact|json-pretty`
+- `--output table|text|list|json|json-compact|json-pretty`
 - `--fields` for JSON field projection where practical
 - `--quiet` for suppressing decorative output
 

@@ -39,27 +39,105 @@ impl OutputOptions {
             OutputFormat::JsonCompact => true,
             OutputFormat::JsonPretty => false,
             OutputFormat::Json => false,
-            OutputFormat::Table | OutputFormat::List => false,
+            OutputFormat::Table | OutputFormat::Text | OutputFormat::List => false,
         }
     }
 }
 
-pub fn print_rows(headers: &[&str], rows: Vec<Vec<String>>, output: &OutputOptions) {
+pub fn print_rows(
+    headers: &[&str],
+    rows: Vec<Vec<String>>,
+    output: &OutputOptions,
+) -> Result<(), CliError> {
+    let (headers, rows) = select_row_fields(headers, rows, &output.fields)?;
+    if headers.is_empty() && !output.fields.is_empty() {
+        return Ok(());
+    }
+
     match output.format {
         OutputFormat::Json => unreachable!("JSON rows should be emitted with print_json"),
         OutputFormat::JsonCompact => unreachable!("JSON rows should be emitted with print_json"),
         OutputFormat::JsonPretty => unreachable!("JSON rows should be emitted with print_json"),
-        OutputFormat::List => print_row_list(headers, &rows),
-        OutputFormat::Table if output.format_explicit => print_table(headers, &rows),
-        OutputFormat::Table => print_adaptive_table(headers, &rows),
+        OutputFormat::Text => print_text_rows(&rows),
+        OutputFormat::List => print_row_list(&headers, &rows),
+        OutputFormat::Table if output.format_explicit => print_table(&headers, &rows),
+        OutputFormat::Table => print_adaptive_table(&headers, &rows),
     }
+    Ok(())
+}
+
+fn select_row_fields(
+    headers: &[&str],
+    rows: Vec<Vec<String>>,
+    fields: &[String],
+) -> Result<(Vec<String>, Vec<Vec<String>>), CliError> {
+    if fields.is_empty() {
+        return Ok((
+            headers.iter().map(|header| (*header).to_string()).collect(),
+            rows,
+        ));
+    }
+
+    let mut selected_indices = Vec::new();
+    let mut unknown_fields = Vec::new();
+    for field in fields {
+        let original = field.trim();
+        if let Some(index) = headers
+            .iter()
+            .position(|header| *header == original)
+            .or_else(|| {
+                let top_level = original.split('.').next().unwrap_or(original).trim();
+                headers.iter().position(|header| *header == top_level)
+            })
+        {
+            selected_indices.push(index);
+        } else {
+            unknown_fields.push(original.to_string());
+        }
+    }
+
+    if !unknown_fields.is_empty() {
+        return Err(unknown_fields_error(&unknown_fields, headers));
+    }
+
+    if selected_indices.is_empty() {
+        return Ok((Vec::new(), Vec::new()));
+    }
+
+    let selected_headers = selected_indices
+        .iter()
+        .map(|index| headers[*index].to_string())
+        .collect();
+    let selected_rows = rows
+        .into_iter()
+        .map(|row| {
+            selected_indices
+                .iter()
+                .map(|index| row.get(*index).cloned().unwrap_or_default())
+                .collect()
+        })
+        .collect();
+
+    Ok((selected_headers, selected_rows))
+}
+
+fn unknown_fields_error(unknown_fields: &[String], available_fields: &[&str]) -> CliError {
+    let field_label = if unknown_fields.len() == 1 {
+        format!("unknown field '{}'", unknown_fields[0])
+    } else {
+        format!("unknown fields: {}", unknown_fields.join(", "))
+    };
+    CliError::invalid_input(format!(
+        "{field_label}; available fields: {}",
+        available_fields.join(", ")
+    ))
 }
 
 pub fn print_json<T: Serialize>(value: &T, output: &OutputOptions) -> Result<(), CliError> {
     let mut value = serde_json::to_value(value)?;
 
     if !output.fields.is_empty() {
-        value = select_fields(&value, &output.fields);
+        value = select_fields(&value, &output.fields)?;
     }
 
     let text = if output.json_compact() {
@@ -97,44 +175,53 @@ pub fn emit_error_json(error: &CliError, compact: bool) {
     }
 }
 
-fn select_fields(value: &Value, fields: &[String]) -> Value {
+fn select_fields(value: &Value, fields: &[String]) -> Result<Value, CliError> {
     match value {
-        Value::Array(items) => Value::Array(
+        Value::Array(items) => Ok(Value::Array(
             items
                 .iter()
                 .map(|item| select_object(item, fields))
-                .collect(),
-        ),
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
         Value::Object(_) => select_object(value, fields),
-        other => other.clone(),
+        other => Ok(other.clone()),
     }
 }
 
-fn select_object(value: &Value, fields: &[String]) -> Value {
+fn select_object(value: &Value, fields: &[String]) -> Result<Value, CliError> {
     let mut out = Map::new();
+    let mut unknown_fields = Vec::new();
 
     for field in fields {
         let path: Vec<&str> = field.split('.').filter(|part| !part.is_empty()).collect();
         if path.is_empty() {
             continue;
         }
-        insert_selected(&mut out, value, &path);
+        if !insert_selected(&mut out, value, &path) {
+            unknown_fields.push(field.to_string());
+        }
     }
 
-    Value::Object(out)
+    if !unknown_fields.is_empty() {
+        let available = available_json_fields(value);
+        let available_refs: Vec<&str> = available.iter().map(String::as_str).collect();
+        return Err(unknown_fields_error(&unknown_fields, &available_refs));
+    }
+
+    Ok(Value::Object(out))
 }
 
-fn insert_selected(out: &mut Map<String, Value>, source: &Value, path: &[&str]) {
+fn insert_selected(out: &mut Map<String, Value>, source: &Value, path: &[&str]) -> bool {
     let Some((head, tail)) = path.split_first() else {
-        return;
+        return true;
     };
     let Some(value) = source.get(*head) else {
-        return;
+        return false;
     };
 
     if tail.is_empty() {
         out.insert((*head).to_string(), value.clone());
-        return;
+        return true;
     }
 
     match value {
@@ -143,10 +230,16 @@ fn insert_selected(out: &mut Map<String, Value>, source: &Value, path: &[&str]) 
                 .entry((*head).to_string())
                 .or_insert_with(|| Value::Object(Map::new()));
             if let Value::Object(map) = entry {
-                insert_selected(map, value, tail);
+                insert_selected(map, value, tail)
+            } else {
+                false
             }
         }
         Value::Array(items) => {
+            if items.is_empty() {
+                out.insert((*head).to_string(), Value::Array(Vec::new()));
+                return true;
+            }
             let projected_items: Vec<Value> = items
                 .iter()
                 .map(|item| {
@@ -162,8 +255,23 @@ fn insert_selected(out: &mut Map<String, Value>, source: &Value, path: &[&str]) 
                     out.insert((*head).to_string(), Value::Array(projected_items));
                 }
             }
+            true
         }
-        _ => {}
+        _ => false,
+    }
+}
+
+fn available_json_fields(value: &Value) -> Vec<String> {
+    match value {
+        Value::Object(map) => map.keys().cloned().collect(),
+        Value::Array(items) => items
+            .iter()
+            .find_map(|item| match item {
+                Value::Object(map) => Some(map.keys().cloned().collect()),
+                _ => None,
+            })
+            .unwrap_or_default(),
+        _ => Vec::new(),
     }
 }
 
@@ -189,7 +297,7 @@ fn merge_maps(into: &mut Map<String, Value>, from: Map<String, Value>) {
     }
 }
 
-fn print_adaptive_table(headers: &[&str], rows: &[Vec<String>]) {
+fn print_adaptive_table(headers: &[String], rows: &[Vec<String>]) {
     let widths = table_widths(headers, rows);
     if terminal_width().is_some_and(|terminal_width| table_width(&widths) > terminal_width) {
         print_row_list(headers, rows);
@@ -199,14 +307,14 @@ fn print_adaptive_table(headers: &[&str], rows: &[Vec<String>]) {
     print_table_with_widths(headers, rows, &widths);
 }
 
-fn print_table(headers: &[&str], rows: &[Vec<String>]) {
+fn print_table(headers: &[String], rows: &[Vec<String>]) {
     let widths = table_widths(headers, rows);
     print_table_with_widths(headers, rows, &widths);
 }
 
-fn print_table_with_widths(headers: &[&str], rows: &[Vec<String>], widths: &[usize]) {
+fn print_table_with_widths(headers: &[String], rows: &[Vec<String>], widths: &[usize]) {
     print_table_line(widths);
-    print_table_row(headers.iter().copied(), widths);
+    print_table_row(headers.iter().map(String::as_str), widths);
     print_table_line(widths);
     for row in rows {
         print_table_row(row.iter().map(String::as_str), widths);
@@ -214,8 +322,11 @@ fn print_table_with_widths(headers: &[&str], rows: &[Vec<String>], widths: &[usi
     print_table_line(widths);
 }
 
-fn table_widths(headers: &[&str], rows: &[Vec<String>]) -> Vec<usize> {
-    let mut widths: Vec<usize> = headers.iter().map(|header| display_width(header)).collect();
+fn table_widths<T: AsRef<str>>(headers: &[T], rows: &[Vec<String>]) -> Vec<usize> {
+    let mut widths: Vec<usize> = headers
+        .iter()
+        .map(|header| display_width(header.as_ref()))
+        .collect();
     for row in rows {
         for (index, cell) in row.iter().enumerate() {
             widths[index] = widths[index].max(display_width(cell.as_str()));
@@ -288,7 +399,7 @@ fn print_table_row<'a>(cells: impl IntoIterator<Item = &'a str>, widths: &[usize
     println!();
 }
 
-fn print_row_list(headers: &[&str], rows: &[Vec<String>]) {
+fn print_row_list(headers: &[String], rows: &[Vec<String>]) {
     for (row_index, row) in rows.iter().enumerate() {
         if row_index > 0 {
             println!();
@@ -296,6 +407,12 @@ fn print_row_list(headers: &[&str], rows: &[Vec<String>]) {
         for (header, cell) in headers.iter().zip(row) {
             println!("{header}: {cell}");
         }
+    }
+}
+
+fn print_text_rows(rows: &[Vec<String>]) {
+    for row in rows {
+        println!("{}", row.join("\t"));
     }
 }
 
@@ -308,7 +425,8 @@ mod tests {
     fn selects_nested_fields_for_arrays() {
         let value =
             json!([{ "id": "not_123", "owner": { "email": "a@example.com" }, "title": "A" }]);
-        let selected = select_fields(&value, &["id".to_string(), "owner.email".to_string()]);
+        let selected =
+            select_fields(&value, &["id".to_string(), "owner.email".to_string()]).unwrap();
         assert_eq!(
             selected,
             json!([{ "id": "not_123", "owner": { "email": "a@example.com" } }])
@@ -332,7 +450,8 @@ mod tests {
                 "notes.owner.email".to_string(),
                 "count".to_string(),
             ],
-        );
+        )
+        .unwrap();
 
         assert_eq!(
             selected,
@@ -372,5 +491,44 @@ mod tests {
         assert_eq!(display_width("⚔️"), 2);
         assert_eq!(widths, vec![7, 20]);
         assert_eq!(table_width(&widths), 34);
+    }
+
+    #[test]
+    fn selects_table_rows_by_field_name() {
+        let (headers, rows) = select_row_fields(
+            &["id", "title", "owner"],
+            vec![vec![
+                "not_123".to_string(),
+                "Planning".to_string(),
+                "a@example.com".to_string(),
+            ]],
+            &["id".to_string()],
+        )
+        .unwrap();
+
+        assert_eq!(headers, vec!["id"]);
+        assert_eq!(rows, vec![vec!["not_123"]]);
+    }
+
+    #[test]
+    fn unknown_table_fields_error() {
+        let error = select_row_fields(
+            &["id", "title"],
+            vec![vec!["not_123".to_string(), "Planning".to_string()]],
+            &["id".to_string(), "NOPE".to_string()],
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("unknown field 'NOPE'"));
+        assert!(error.to_string().contains("available fields: id, title"));
+    }
+
+    #[test]
+    fn unknown_json_fields_error() {
+        let value = json!({ "id": "not_123", "title": "Planning" });
+
+        let error = select_fields(&value, &["NODOESNTEXIST".to_string()]).unwrap_err();
+
+        assert!(error.to_string().contains("unknown field 'NODOESNTEXIST'"));
     }
 }

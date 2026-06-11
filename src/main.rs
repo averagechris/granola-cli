@@ -57,6 +57,7 @@ struct Cli {
 pub enum OutputFormat {
     #[default]
     Table,
+    Text,
     List,
     Json,
     JsonCompact,
@@ -134,17 +135,21 @@ async fn main() {
             std::process::exit(err.code().into());
         }
     };
-    let output_format = cli
-        .output
-        .or(configured_output)
-        .unwrap_or(OutputFormat::Table);
+    let fields = cli.fields;
+    let output_format = cli.output.or(configured_output).unwrap_or_else(|| {
+        if fields.len() == 1 {
+            OutputFormat::Text
+        } else {
+            OutputFormat::Table
+        }
+    });
     let output_format_explicit = arg_present("--output") || configured_output.is_some();
     let quiet = if arg_present("--quiet") || arg_present("-q") {
         cli.quiet
     } else {
         effective_config.quiet.unwrap_or(cli.quiet)
     };
-    let output = OutputOptions::new(output_format, output_format_explicit, cli.fields, quiet);
+    let output = OutputOptions::new(output_format, output_format_explicit, fields, quiet);
 
     let cache_mode = CacheMode::new(!cli.no_cache, !cli.no_cache_write);
     if let Err(err) = run(cli.command, cli.api_key, cache_mode, &output).await {

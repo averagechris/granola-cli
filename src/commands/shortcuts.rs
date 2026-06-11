@@ -147,8 +147,7 @@ async fn list_shortcut(
         );
     }
 
-    print_note_table(&notes, output);
-    Ok(())
+    print_note_table(&notes, output)
 }
 
 fn cache_summaries_if_enabled(
@@ -186,10 +185,13 @@ fn print_note_detail(note: &Note) {
     );
 }
 
-fn print_note_table(notes: &[NoteSummary], output: &OutputOptions) {
+fn print_note_table(notes: &[NoteSummary], output: &OutputOptions) -> Result<(), CliError> {
     if notes.is_empty() {
+        if !output.fields.is_empty() {
+            return Ok(());
+        }
         println!("No notes found");
-        return;
+        return Ok(());
     }
     print_rows(
         &["id", "title", "owner", "updated_at"],
@@ -205,7 +207,7 @@ fn print_note_table(notes: &[NoteSummary], output: &OutputOptions) {
             })
             .collect(),
         output,
-    );
+    )
 }
 
 fn relative_time_after(duration: Duration) -> String {

@@ -110,7 +110,7 @@ async fn list_folders(
         );
     }
 
-    print_folder_table(&result.folders, output);
+    print_folder_table(&result.folders, output)?;
     Ok(())
 }
 
@@ -169,7 +169,7 @@ struct FolderRow<'a> {
     parent_folder_id: &'a str,
 }
 
-fn print_folder_table(folders: &[Folder], output: &OutputOptions) {
+fn print_folder_table(folders: &[Folder], output: &OutputOptions) -> Result<(), CliError> {
     let rows: Vec<FolderRow<'_>> = folders
         .iter()
         .map(|folder| FolderRow {
@@ -180,6 +180,9 @@ fn print_folder_table(folders: &[Folder], output: &OutputOptions) {
         .collect();
 
     if rows.is_empty() {
+        if !output.fields.is_empty() {
+            return Ok(());
+        }
         println!("No folders found");
     } else {
         print_rows(
@@ -194,8 +197,9 @@ fn print_folder_table(folders: &[Folder], output: &OutputOptions) {
                 })
                 .collect(),
             output,
-        );
+        )?;
     }
+    Ok(())
 }
 
 fn folder_tree(folders: &[Folder]) -> Vec<serde_json::Value> {

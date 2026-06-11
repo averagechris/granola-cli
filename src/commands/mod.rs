@@ -33,6 +33,7 @@ pub struct DoctorCommand {
 }
 
 pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
+    let note_fields = crate::commands::notes::note_field_specs();
     let data = json!({
         "name": "granola",
         "version": env!("CARGO_PKG_VERSION"),
@@ -46,13 +47,14 @@ pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
                 "description": "List note metadata, get one or many full notes, search the cache, or open the Granola web URL.",
                 "examples": [
                     "granola notes list --since 7d --sort updated-at --order desc --output json-compact",
-                    "granola notes get NOTE_ID_OR_URL --include-transcript --output json-compact",
+                    "granola notes get NOTE_ID_OR_URL --fields id,title,summary,transcript --output json-compact",
                     "granola notes get-many --since 7d --include-transcript --jsonl"
                 ],
                 "json_shapes": {
                     "list": { "notes": [], "count": 0, "has_more": false, "cursor": null, "page_size": 10 },
                     "get_many": { "notes": [], "count": 0 }
-                }
+                },
+                "fields": note_fields
             },
             "folders": {
                 "description": "List accessible folders for folder-scoped note queries.",
@@ -97,9 +99,10 @@ pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
             "--output json": "Use stable machine-readable output for data commands and JSON error objects on failure.",
             "--output json-compact": "Use stable machine-readable output without JSON whitespace.",
             "--output json-pretty": "Use stable machine-readable output with JSON indentation.",
+            "--output text": "Use plain text rows. This is the default when exactly one field is requested.",
             "--output list": "Use a human-readable key/value block format instead of the adaptive ASCII table.",
             "--output table": "Force an ASCII table, even if it is wider than the terminal.",
-            "--fields a,b.c": "Project JSON to requested field paths where supported.",
+            "--fields a,b.c": "Select requested fields. Exactly one field defaults to plain text output for pipelines.",
             "--quiet": "Suppress non-essential human output.",
             "--api-key KEY": "Process-local auth override. Prefer keyring or --key-stdin for automation."
         },
@@ -111,7 +114,8 @@ pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
             { "name": "full recent notes", "command": "granola notes get-many --since 7d --include-transcript --jsonl" },
             { "name": "cache and search", "command": "granola sync --since 30d --all --include-transcript && granola notes search pricing --output json-compact" },
             { "name": "agent profile", "command": "granola config set profile.agent.output json-compact" },
-            { "name": "small payload", "command": "granola notes list --output json-compact --fields notes.id,notes.title,notes.owner.email,count,has_more,cursor" }
+            { "name": "small payload", "command": "granola notes list --output json-compact --fields notes.id,notes.title,notes.owner.email,count,has_more,cursor" },
+            { "name": "discover note fields", "command": "granola notes fields --output json-compact" }
         ],
         "constraints": [
             "credentials are keyring-only unless --api-key is provided for one process",
@@ -132,17 +136,17 @@ pub fn agent(output: &OutputOptions) -> Result<(), CliError> {
     println!(
         "- Use `granola notes list --output json-compact` for paginated note metadata envelopes."
     );
-    println!(
-        "- Use `granola notes get NOTE_ID_OR_URL --include-transcript --output json` for full note data."
-    );
+    println!("- Use `granola notes get NOTE_ID_OR_URL --output json` for the full note record.");
     println!("- Use `granola notes get-many --since 7d --include-transcript --jsonl` for efficient batch note retrieval.");
+    println!("- Use `granola notes fields --output json` to discover supported note fields.");
     println!("- Use `granola sync --since 30d --all --include-transcript` plus `granola notes search QUERY` for repeated local cache searches.");
     println!("- Use `granola config set profile.agent.output json-compact` and `--profile agent` for non-secret defaults.");
     println!("- Use `granola export note NOTE_ID --format markdown` for portable note output.");
     println!("- Use `--output list` for a narrow-terminal human-readable format.");
+    println!("- Use `--output text` for plain pipeline-friendly values.");
     println!("- Use `--output table` to force the ASCII table even when it is wide.");
     println!("- Use `--output json-compact` or `--output json-pretty` to control JSON whitespace.");
-    println!("- Use `--fields` to reduce JSON payloads, e.g. `--fields id,title,owner.email`.");
+    println!("- Use `--fields` to select output fields, e.g. `--fields id,title,owner.email`.");
     println!(
         "- Re-run `granola agent --output json-compact` for the full machine-readable contract."
     );

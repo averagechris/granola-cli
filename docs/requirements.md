@@ -28,7 +28,7 @@
 - Follow `linear-cli` ergonomics where they fit:
   - explicit subcommands with short aliases once stable
   - keyring-backed auth
-  - `--output json|json-compact|json-pretty|table|list`
+  - `--output json|json-compact|json-pretty|table|text|list`
   - `--fields`
   - clear exit codes
   - agent-oriented help/documentation
