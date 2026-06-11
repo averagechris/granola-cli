@@ -10,11 +10,15 @@ use crate::redaction::{redact_note, redact_note_summary, redact_notes, Redaction
 use crate::types::{Note, NoteSummary};
 use chrono::{Duration, SecondsFormat, Utc};
 use clap::{Args, Subcommand, ValueEnum};
-use serde::Serialize;
 use serde_json::{json, Value};
 use std::fs;
 use std::io::{self, IsTerminal, Read};
 use std::path::PathBuf;
+
+mod fields;
+
+pub(crate) use fields::note_field_specs;
+use fields::NoteOutputCommand;
 
 #[derive(Debug, Args)]
 pub struct NotesCommand {
@@ -257,155 +261,11 @@ pub async fn handle(
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(crate) struct NoteFieldSpec {
-    pub(crate) name: &'static str,
-    pub(crate) commands: &'static [&'static str],
-    pub(crate) description: &'static str,
-    pub(crate) requires_transcript: bool,
-    pub(crate) json_only: bool,
-}
-
-pub(crate) fn note_field_specs() -> &'static [NoteFieldSpec] {
-    &[
-        NoteFieldSpec {
-            name: "id",
-            commands: &["list", "search", "get"],
-            description: "Granola note ID. Useful for pipelines into `notes get` or `notes get-many --stdin`.",
-            requires_transcript: false,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "title",
-            commands: &["list", "search", "get"],
-            description: "Note title.",
-            requires_transcript: false,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "owner",
-            commands: &["list", "search", "get"],
-            description: "Owner email in human/text output; owner object in JSON output.",
-            requires_transcript: false,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "owner.email",
-            commands: &["get"],
-            description: "Owner email address.",
-            requires_transcript: false,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "created_at",
-            commands: &["list", "search", "get"],
-            description: "Creation timestamp.",
-            requires_transcript: false,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "updated_at",
-            commands: &["list", "search", "get"],
-            description: "Last update timestamp.",
-            requires_transcript: false,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "cached",
-            commands: &["search"],
-            description: "Search-cache detail level: summary, full, or transcript.",
-            requires_transcript: false,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "url",
-            commands: &["get"],
-            description: "Granola web URL. Alias for web_url in human/text output.",
-            requires_transcript: false,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "web_url",
-            commands: &["get"],
-            description: "Granola web URL.",
-            requires_transcript: false,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "summary",
-            commands: &["search", "get"],
-            description: "Generated summary, preferring Markdown when available and falling back to plain summary text.",
-            requires_transcript: false,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "summary_text",
-            commands: &["search", "get"],
-            description: "Generated plain-text summary.",
-            requires_transcript: false,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "summary_markdown",
-            commands: &["search", "get"],
-            description: "Generated Markdown summary when available.",
-            requires_transcript: false,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "transcript",
-            commands: &["search", "get"],
-            description: "Transcript text in human/text output; raw transcript array in JSON output.",
-            requires_transcript: true,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "transcript_text",
-            commands: &["search", "get"],
-            description: "Rendered transcript text with speaker labels.",
-            requires_transcript: true,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "full",
-            commands: &["get"],
-            description: "Human-readable title, metadata, summary, and transcript text.",
-            requires_transcript: true,
-            json_only: false,
-        },
-        NoteFieldSpec {
-            name: "attendees",
-            commands: &["get"],
-            description: "Attendee objects. Available in JSON output.",
-            requires_transcript: false,
-            json_only: true,
-        },
-        NoteFieldSpec {
-            name: "calendar_event",
-            commands: &["get"],
-            description: "Calendar event object. Available in JSON output.",
-            requires_transcript: false,
-            json_only: true,
-        },
-        NoteFieldSpec {
-            name: "folder_membership",
-            commands: &["get"],
-            description: "Folder membership array. Available in JSON output.",
-            requires_transcript: false,
-            json_only: true,
-        },
-    ]
-}
-
 fn note_fields(command: FieldsNotesCommand, output: &OutputOptions) -> Result<(), CliError> {
-    let fields: Vec<&NoteFieldSpec> = note_field_specs()
-        .iter()
-        .filter(|field| {
-            command
-                .command
-                .is_none_or(|command| field.commands.contains(&note_fields_command_name(command)))
-        })
-        .collect();
+    let fields: Vec<_> = match command.command {
+        Some(command) => fields::specs_for_command(command.into(), true).collect(),
+        None => note_field_specs().iter().collect(),
+    };
 
     if output.is_json() {
         return print_json(&json!({ "fields": fields, "count": fields.len() }), output);
@@ -434,14 +294,6 @@ fn note_fields(command: FieldsNotesCommand, output: &OutputOptions) -> Result<()
         output,
     )?;
     Ok(())
-}
-
-fn note_fields_command_name(command: NoteFieldsCommand) -> &'static str {
-    match command {
-        NoteFieldsCommand::List => "list",
-        NoteFieldsCommand::Search => "search",
-        NoteFieldsCommand::Get => "get",
-    }
 }
 
 async fn list_notes(
@@ -650,19 +502,15 @@ async fn hydrate_notes(
     cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
+    let include_transcript = command.include_transcript
+        || json_fields_request_transcript(output)
+        || human_fields_require_transcript(output, NoteOutputCommand::Get)?;
     let ids = hydrate_note_ids(client, &command).await?;
     let mut notes = Vec::with_capacity(ids.len());
 
     for id in ids {
         notes.push(
-            get_note_with_cache(
-                client,
-                cache_store,
-                &id,
-                command.include_transcript,
-                cache_mode,
-            )
-            .await?,
+            get_note_with_cache(client, cache_store, &id, include_transcript, cache_mode).await?,
         );
     }
     redact_notes(&mut notes, &command.redact);
@@ -832,8 +680,11 @@ async fn get_note(
     cache_mode: CacheMode,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
-    let include_transcript = note_fields_require_transcript(&output.fields)
-        || (output.is_json() && output.fields.is_empty());
+    let include_transcript = if output.is_json() {
+        output.fields.is_empty() || json_fields_request_transcript(output)
+    } else {
+        human_fields_require_transcript(output, NoteOutputCommand::Get)?
+    };
     let note_id = resolve_get_note_id(command.note_id.as_deref())?;
     let mut note = get_note_with_cache(
         client,
@@ -850,7 +701,7 @@ async fn get_note(
     }
 
     if !output.fields.is_empty() {
-        print_note_fields(&note, output)?;
+        fields::render_single_note_selected(&note, output)?;
         return Ok(());
     }
 
@@ -858,13 +709,24 @@ async fn get_note(
     Ok(())
 }
 
-fn note_fields_require_transcript(fields: &[String]) -> bool {
-    fields.iter().any(|field| {
-        matches!(
-            note_field_name(field),
-            "transcript" | "transcript_text" | "full"
-        )
-    })
+fn human_fields_require_transcript(
+    output: &OutputOptions,
+    command: NoteOutputCommand,
+) -> Result<bool, CliError> {
+    if output.is_json() || output.fields.is_empty() {
+        return Ok(false);
+    }
+    fields::requested_fields_require_transcript(&output.fields, command, output)
+}
+
+fn json_fields_request_transcript(output: &OutputOptions) -> bool {
+    output.is_json()
+        && output.fields.iter().any(|field| {
+            matches!(
+                field.trim().rsplit('.').next().unwrap_or_default(),
+                "transcript" | "transcript_text" | "full"
+            )
+        })
 }
 
 fn note_json_value(note: &Note) -> Value {
@@ -878,58 +740,6 @@ fn note_json_value(note: &Note) -> Value {
         map.insert("full".to_string(), json!(render_note_full(note)));
     }
     value
-}
-
-fn print_note_fields(note: &Note, output: &OutputOptions) -> Result<(), CliError> {
-    let mut headers = Vec::new();
-    let mut values = Vec::new();
-
-    for field in &output.fields {
-        let name = note_field_name(field);
-        if let Some(value) = render_note_field(note, name) {
-            headers.push(field.to_string());
-            values.push(value);
-        } else {
-            let available: Vec<&str> = note_field_specs()
-                .iter()
-                .filter(|field| field.commands.contains(&"get") && !field.json_only)
-                .map(|field| field.name)
-                .collect();
-            return Err(CliError::invalid_input(format!(
-                "unknown field '{name}'; available fields: {}",
-                available.join(", ")
-            )));
-        }
-    }
-
-    if headers.is_empty() {
-        return Ok(());
-    }
-
-    let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
-    print_rows(&header_refs, vec![values], output)
-}
-
-fn note_field_name(field: &str) -> &str {
-    field.trim()
-}
-
-fn render_note_field(note: &Note, field: &str) -> Option<String> {
-    match field {
-        "id" => Some(note.id.clone()),
-        "object" => Some(note.object.clone()),
-        "title" => Some(note.title.as_deref().unwrap_or("").to_string()),
-        "owner" | "owner.email" => Some(note.owner.email.clone()),
-        "created_at" => Some(note.created_at.clone()),
-        "updated_at" => Some(note.updated_at.clone()),
-        "url" | "web_url" => Some(note.web_url.clone()),
-        "summary" => Some(render_note_summary(note)),
-        "summary_text" => Some(note.summary_text.clone()),
-        "summary_markdown" => Some(note.summary_markdown.clone().unwrap_or_default()),
-        "transcript" | "transcript_text" => Some(render_transcript(note)),
-        "full" => Some(render_note_full(note)),
-        _ => None,
-    }
 }
 
 fn resolve_get_note_id(note_id: Option<&str>) -> Result<String, CliError> {
@@ -1084,72 +894,16 @@ async fn search_cache_warning(
     }))
 }
 
-struct NoteRow {
-    id: String,
-    title: String,
-    owner: String,
-    created_at: String,
-    updated_at: String,
-}
-
 fn print_note_table(
     notes: &[NoteSummary],
     no_truncate: bool,
     output: &OutputOptions,
 ) -> Result<(), CliError> {
-    let rows: Vec<NoteRow> = notes
-        .iter()
-        .map(|note| NoteRow {
-            id: note.id.clone(),
-            title: display_title(note, no_truncate),
-            owner: note.owner.email.clone(),
-            created_at: note.created_at.clone(),
-            updated_at: note.updated_at.clone(),
-        })
-        .collect();
-
-    if rows.is_empty() {
-        if !output.fields.is_empty() {
-            return Ok(());
-        }
-        println!("No notes found");
-    } else {
-        print_rows(
-            &["id", "title", "owner", "created_at", "updated_at"],
-            rows.into_iter()
-                .map(|row| vec![row.id, row.title, row.owner, row.created_at, row.updated_at])
-                .collect(),
-            output,
-        )?;
-    }
-    Ok(())
+    fields::render_summary_records(notes, no_truncate, output)
 }
 
 fn print_hydrated_note_table(notes: &[Note], output: &OutputOptions) -> Result<(), CliError> {
-    if notes.is_empty() {
-        if !output.fields.is_empty() {
-            return Ok(());
-        }
-        println!("No notes found");
-        return Ok(());
-    }
-
-    print_rows(
-        &["id", "title", "owner", "created_at", "updated_at"],
-        notes
-            .iter()
-            .map(|note| {
-                vec![
-                    note.id.clone(),
-                    note.title.as_deref().unwrap_or("").to_string(),
-                    note.owner.email.clone(),
-                    note.created_at.clone(),
-                    note.updated_at.clone(),
-                ]
-            })
-            .collect(),
-        output,
-    )
+    fields::render_note_records(notes, output)
 }
 
 fn print_search_result_table(
@@ -1160,103 +914,13 @@ fn print_search_result_table(
 ) -> Result<(), CliError> {
     if hits.is_empty() {
         if !output.fields.is_empty() {
-            return Ok(());
+            return fields::render_search_records(hits, output);
         }
         print_no_search_hits(query, status);
         return Ok(());
     }
 
-    if !output.fields.is_empty() {
-        return print_search_result_fields(hits, output);
-    }
-
-    print_rows(
-        &["id", "title", "owner", "updated_at", "cached"],
-        hits.iter()
-            .map(|hit| {
-                vec![
-                    hit.summary.id.clone(),
-                    hit.summary.title.as_deref().unwrap_or("").to_string(),
-                    hit.summary.owner.email.clone(),
-                    hit.summary.updated_at.clone(),
-                    cached_label(hit),
-                ]
-            })
-            .collect(),
-        output,
-    )
-}
-
-fn print_search_result_fields(
-    hits: &[cache::CacheSearchHit],
-    output: &OutputOptions,
-) -> Result<(), CliError> {
-    let mut headers = Vec::new();
-    for field in &output.fields {
-        let name = field.trim();
-        if !search_field_available(name) {
-            let available: Vec<&str> = note_field_specs()
-                .iter()
-                .filter(|field| field.commands.contains(&"search") && !field.json_only)
-                .map(|field| field.name)
-                .collect();
-            return Err(CliError::invalid_input(format!(
-                "unknown field '{name}'; available fields: {}",
-                available.join(", ")
-            )));
-        }
-        headers.push(name.to_string());
-    }
-
-    let rows = hits
-        .iter()
-        .map(|hit| {
-            headers
-                .iter()
-                .map(|field| render_search_hit_field(hit, field))
-                .collect()
-        })
-        .collect();
-    let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
-    let mut row_output = output.clone();
-    row_output.fields.clear();
-    print_rows(&header_refs, rows, &row_output)
-}
-
-fn search_field_available(field: &str) -> bool {
-    note_field_specs()
-        .iter()
-        .any(|spec| spec.commands.contains(&"search") && !spec.json_only && spec.name == field)
-}
-
-fn render_search_hit_field(hit: &cache::CacheSearchHit, field: &str) -> String {
-    match field {
-        "id" => hit.summary.id.clone(),
-        "title" => hit.summary.title.as_deref().unwrap_or("").to_string(),
-        "owner" => hit.summary.owner.email.clone(),
-        "created_at" => hit.summary.created_at.clone(),
-        "updated_at" => hit.summary.updated_at.clone(),
-        "cached" => cached_label(hit),
-        "summary" => hit
-            .note
-            .as_ref()
-            .map(render_note_summary)
-            .unwrap_or_default(),
-        "summary_text" => hit
-            .note
-            .as_ref()
-            .map(|note| note.summary_text.clone())
-            .unwrap_or_default(),
-        "summary_markdown" => hit
-            .note
-            .as_ref()
-            .and_then(|note| note.summary_markdown.clone())
-            .unwrap_or_default(),
-        "transcript" | "transcript_text" => {
-            hit.note.as_ref().map(render_transcript).unwrap_or_default()
-        }
-        _ => String::new(),
-    }
+    fields::render_search_records(hits, output)
 }
 
 fn print_no_search_hits(query: &str, status: &cache::CacheStatus) {
@@ -1425,12 +1089,32 @@ mod tests {
 
     #[test]
     fn transcript_fields_imply_transcript_fetch() {
-        assert!(note_fields_require_transcript(&["transcript".to_string()]));
-        assert!(note_fields_require_transcript(&[
-            "transcript_text".to_string()
-        ]));
-        assert!(note_fields_require_transcript(&["full".to_string()]));
-        assert!(!note_fields_require_transcript(&["summary".to_string()]));
+        let output = OutputOptions::new(crate::OutputFormat::Text, false, Vec::new(), false);
+
+        assert!(fields::requested_fields_require_transcript(
+            &["transcript".to_string()],
+            NoteOutputCommand::Get,
+            &output
+        )
+        .unwrap());
+        assert!(fields::requested_fields_require_transcript(
+            &["transcript_text".to_string()],
+            NoteOutputCommand::Get,
+            &output
+        )
+        .unwrap());
+        assert!(fields::requested_fields_require_transcript(
+            &["full".to_string()],
+            NoteOutputCommand::Get,
+            &output
+        )
+        .unwrap());
+        assert!(!fields::requested_fields_require_transcript(
+            &["summary".to_string()],
+            NoteOutputCommand::Get,
+            &output
+        )
+        .unwrap());
     }
 
     #[test]
@@ -1438,14 +1122,16 @@ mod tests {
         let note = fixture_note_with_transcript();
 
         assert_eq!(
-            render_note_field(&note, "id").as_deref(),
-            Some(note.id.as_str())
+            fields::render_note_field(&note, "id").unwrap().as_str(),
+            note.id.as_str()
         );
         assert_eq!(
-            render_note_field(&note, "summary").as_deref(),
-            Some("# Redacted Summary\n\n- Redacted bullet")
+            fields::render_note_field(&note, "summary")
+                .unwrap()
+                .as_str(),
+            "# Redacted Summary\n\n- Redacted bullet"
         );
-        assert!(render_note_field(&note, "transcript")
+        assert!(fields::render_note_field(&note, "transcript")
             .unwrap()
             .contains("Speaker A: Redacted transcript text."));
     }

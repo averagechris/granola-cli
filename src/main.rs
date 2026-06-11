@@ -136,7 +136,7 @@ async fn main() {
         }
     };
     let fields = cli.fields;
-    let output_format = cli.output.or(configured_output).unwrap_or_else(|| {
+    let output_format = cli.output.or(configured_output).unwrap_or({
         if fields.len() == 1 {
             OutputFormat::Text
         } else {

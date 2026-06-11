@@ -19,8 +19,8 @@ nix run .#package-macos
 This creates:
 
 ```text
-dist/downloads/granola-cli-v0.7.0-aarch64-darwin.tar.gz
-dist/downloads/granola-cli-v0.7.0-aarch64-darwin.tar.gz.sha256
+dist/downloads/granola-cli-v0.8.0-aarch64-darwin.tar.gz
+dist/downloads/granola-cli-v0.8.0-aarch64-darwin.tar.gz.sha256
 ```
 
 The tarball contains:
@@ -43,7 +43,7 @@ dist/pages/granola-cli-pages.tar.gz
 
 The pages archive contains an `index.html` plus `downloads/` with tarballs and checksums.
 
-The generated download page highlights the current release improvements, including cache read-through for full-note commands, consistent note command names and transcript flags, explicit batch selectors, and clearer local-cache search guidance.
+The generated download page highlights the current release improvements, including pipeline-friendly text output, discoverable note fields, field-driven transcript fetching, cache search field selection, and redaction for emitted search content.
 
 ## Publish to SourceHut Pages
 
@@ -79,15 +79,15 @@ https://averagechris.srht.site/granola-cli/
 Expected macOS artifact URL:
 
 ```text
-https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.7.0-aarch64-darwin.tar.gz
+https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.8.0-aarch64-darwin.tar.gz
 ```
 
 ## Manual install from hosted artifact
 
 ```bash
-curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.7.0-aarch64-darwin.tar.gz
-curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.7.0-aarch64-darwin.tar.gz.sha256
-sha256sum -c granola-cli-v0.7.0-aarch64-darwin.tar.gz.sha256
-tar -xzf granola-cli-v0.7.0-aarch64-darwin.tar.gz
-install -m 0755 granola-cli-v0.7.0-aarch64-darwin/granola ~/.local/bin/granola
+curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.8.0-aarch64-darwin.tar.gz
+curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.8.0-aarch64-darwin.tar.gz.sha256
+sha256sum -c granola-cli-v0.8.0-aarch64-darwin.tar.gz.sha256
+tar -xzf granola-cli-v0.8.0-aarch64-darwin.tar.gz
+install -m 0755 granola-cli-v0.8.0-aarch64-darwin/granola ~/.local/bin/granola
 ```

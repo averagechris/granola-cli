@@ -55,11 +55,11 @@ cat > "${site_dir}/index.html" <<EOF
 
   <h2>What's new in v${version}</h2>
   <ul>
-    <li>Read complete full-note results from the local cache before hitting the API.</li>
-    <li>Standardize note commands around <code>notes get</code>, <code>notes get-many</code>, <code>notes search</code>, and <code>notes open</code>.</li>
-    <li>Use <code>--include-transcript</code> consistently across note retrieval, sync, export, context, and shortcuts.</li>
-    <li>Require explicit note selectors for batch full-note commands to avoid surprising first-page results.</li>
-    <li>Clarify that <code>notes search</code> searches the local cache, not a remote API search endpoint.</li>
+    <li>Add <code>--output text</code> and default single-field output to plain text for shell pipelines.</li>
+    <li>Use requested note fields to plan transcript fetching, so <code>--fields transcript</code> hydrates transcript data automatically.</li>
+    <li>Expose <code>granola notes fields [list|search|get]</code> for discoverable field metadata used by CLI validation and agent guidance.</li>
+    <li>Support cached content fields and <code>--redact emails,phones,secrets,attendees</code> in <code>notes search</code> output.</li>
+    <li>Share note field validation, projection, rendering, and transcript planning across structured note commands.</li>
   </ul>
 
   <h2>Binary downloads</h2>
