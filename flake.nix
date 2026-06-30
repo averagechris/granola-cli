@@ -28,7 +28,7 @@
             lockFile = ./Cargo.lock;
           };
 
-          nativeBuildInputs = with pkgs; [pkg-config];
+          nativeBuildInputs = with pkgs; [cmake pkg-config];
 
           meta = lib.attrsets.filterAttrs (_: value: value != null) {
             description = package.description or null;
@@ -159,6 +159,9 @@
             cargo
             cargo-audit
             cargo-deny
+            cargo-machete
+            cargo-outdated
+            cmake
             clippy
             direnv
             hut

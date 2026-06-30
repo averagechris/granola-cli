@@ -55,11 +55,10 @@ cat > "${site_dir}/index.html" <<EOF
 
   <h2>What's new in v${version}</h2>
   <ul>
-    <li>Add <code>--output text</code> and default single-field output to plain text for shell pipelines.</li>
-    <li>Use requested note fields to plan transcript fetching, so <code>--fields transcript</code> hydrates transcript data automatically.</li>
-    <li>Expose <code>granola notes fields [list|search|get]</code> for discoverable field metadata used by CLI validation and agent guidance.</li>
-    <li>Support cached content fields and <code>--redact emails,phones,secrets,attendees</code> in <code>notes search</code> output.</li>
-    <li>Share note field validation, projection, rendering, and transcript planning across structured note commands.</li>
+    <li>Refresh Nix flake inputs and Cargo dependencies for routine security maintenance.</li>
+    <li>Update direct dependency constraints, including <code>reqwest</code>, <code>rusqlite</code>, <code>keyring</code>, <code>dialoguer</code>, <code>dirs</code>, and <code>toml</code>.</li>
+    <li>Add <code>cargo-outdated</code> and <code>cargo-machete</code> to the Nix dev shell for dependency maintenance.</li>
+    <li>Remove unused direct dependencies and keep the lockfile audit/deny clean.</li>
   </ul>
 
   <h2>Binary downloads</h2>

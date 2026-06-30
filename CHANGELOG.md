@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## v0.8.1 - 2026-06-30
+
+### Changed
+
+- Refreshed Nix flake inputs and Cargo dependencies for routine security maintenance.
+- Updated direct dependency constraints to current releases, including `reqwest`, `rusqlite`, `keyring`, `dialoguer`, `dirs`, and `toml`.
+- Added `cargo-outdated` and `cargo-machete` to the Nix dev shell for dependency maintenance, and removed unused direct dependencies.
+
 ## v0.8.0 - 2026-06-11
 
 ### Changed

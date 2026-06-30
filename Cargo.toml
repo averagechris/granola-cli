@@ -1,6 +1,6 @@
 [package]
 name = "granola-cli"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2021"
 description = "A Rust CLI for Granola meeting notes"
 authors = ["Chris Wilson"]
@@ -16,33 +16,31 @@ name = "granola"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env"] }
 clap_complete = "4"
-colored = "2"
-dirs = "5"
-dialoguer = "0.11"
-reqwest = { version = "0.12", default-features = false, features = ["charset", "http2", "json", "rustls-tls-native-roots", "system-proxy"] }
+dirs = "6"
+dialoguer = "0.12"
+reqwest = { version = "0.13", default-features = false, features = ["charset", "http2", "json", "query", "rustls", "system-proxy"] }
 regex = "1"
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 terminal_size = "0.4"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
-toml = "0.8"
+toml = "1"
 unicode-width = "0.2"
 url = "2"
 open = "5.3.5"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-keyring = { version = "3", features = ["apple-native"] }
+keyring = "4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-keyring = { version = "3", features = ["windows-native"] }
+keyring = "4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+keyring = "4"
 
 [dev-dependencies]
 assert_cmd = "2"
