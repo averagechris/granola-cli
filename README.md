@@ -174,7 +174,11 @@ nix run .#ci-clippy
 nix run .#ci-test
 nix run .#ci-deny
 nix run .#ci-audit
+nix run .#ci-machete
+nix run .#ci-vet
 ```
+
+Supply-chain checks include RustSec advisories (`cargo-audit`), license/source policy (`cargo-deny`), unused direct dependency detection (`cargo-machete`), and dependency review policy (`cargo-vet`). `cargo-outdated` is available in the dev shell for manual dependency maintenance.
 
 Output formatting has snapshot coverage so contributors can see and preserve the expected table, list, and JSON styles:
 

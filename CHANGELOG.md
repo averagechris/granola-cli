@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Added `cargo-machete` and `cargo-vet` local CI checks for unused direct dependencies and dependency review policy enforcement.
+
 ## v0.8.1 - 2026-06-30
 
 ### Changed

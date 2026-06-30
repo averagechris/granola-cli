@@ -5,4 +5,6 @@ lints = [
   { name = "test", command = "nix run .#ci-test" },
   { name = "deny", command = "nix run .#ci-deny" },
   { name = "audit", command = "nix run .#ci-audit" },
+  { name = "machete", command = "nix run .#ci-machete" },
+  { name = "vet", command = "nix run .#ci-vet" },
 ]

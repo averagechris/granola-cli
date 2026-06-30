@@ -83,6 +83,20 @@
             cargo deny check
           '';
         };
+        ciMachete = mkRepoScript {
+          name = "ci-machete";
+          runtimeInputs = with pkgs; [cargo-machete];
+          text = ''
+            cargo machete
+          '';
+        };
+        ciVet = mkRepoScript {
+          name = "ci-vet";
+          runtimeInputs = with pkgs; [cargo-vet];
+          text = ''
+            cargo vet --locked
+          '';
+        };
         packageMacos = mkRepoScript {
           name = "package-macos";
           runtimeInputs = with pkgs; [
@@ -119,7 +133,7 @@
         };
         repoScripts = pkgs.symlinkJoin {
           name = "granola-cli-scripts";
-          paths = [buildPages ciAudit ciClippy ciDeny ciFmt ciTest packageMacos publishPages];
+          paths = [buildPages ciAudit ciClippy ciDeny ciFmt ciMachete ciTest ciVet packageMacos publishPages];
         };
       in {
         packages = {
@@ -129,7 +143,9 @@
           ci-fmt = ciFmt;
           ci-clippy = ciClippy;
           ci-deny = ciDeny;
+          ci-machete = ciMachete;
           ci-test = ciTest;
+          ci-vet = ciVet;
           package-macos = packageMacos;
           build-pages = buildPages;
           publish-pages = publishPages;
@@ -148,7 +164,9 @@
         apps.ci-fmt = flake-utils.lib.mkApp {drv = ciFmt;};
         apps.ci-clippy = flake-utils.lib.mkApp {drv = ciClippy;};
         apps.ci-deny = flake-utils.lib.mkApp {drv = ciDeny;};
+        apps.ci-machete = flake-utils.lib.mkApp {drv = ciMachete;};
         apps.ci-test = flake-utils.lib.mkApp {drv = ciTest;};
+        apps.ci-vet = flake-utils.lib.mkApp {drv = ciVet;};
         apps.package-macos = flake-utils.lib.mkApp {drv = packageMacos;};
         apps.build-pages = flake-utils.lib.mkApp {drv = buildPages;};
         apps.publish-pages = flake-utils.lib.mkApp {drv = publishPages;};
@@ -161,6 +179,7 @@
             cargo-deny
             cargo-machete
             cargo-outdated
+            cargo-vet
             cmake
             clippy
             direnv
