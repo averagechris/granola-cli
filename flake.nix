@@ -497,28 +497,28 @@
         };
         ciAudit = mkRepoScript {
           name = "ci-audit";
-          runtimeInputs = with pkgs; [cargo-audit];
+          runtimeInputs = with pkgs; [cargo cargo-audit];
           text = ''
             cargo audit --deny warnings
           '';
         };
         ciDeny = mkRepoScript {
           name = "ci-deny";
-          runtimeInputs = with pkgs; [cargo-deny];
+          runtimeInputs = with pkgs; [cargo cargo-deny];
           text = ''
             cargo deny check
           '';
         };
         ciMachete = mkRepoScript {
           name = "ci-machete";
-          runtimeInputs = with pkgs; [cargo-machete];
+          runtimeInputs = with pkgs; [cargo cargo-machete];
           text = ''
             cargo machete
           '';
         };
         ciVet = mkRepoScript {
           name = "ci-vet";
-          runtimeInputs = with pkgs; [cargo-vet];
+          runtimeInputs = with pkgs; [cargo cargo-vet];
           text = ''
             cargo vet --locked
           '';
