@@ -6,33 +6,42 @@ Primary install remains Nix:
 nix run sourcehut:averagechris/granola-cli
 ```
 
-For non-Nix users, this repo can publish static binary downloads to SourceHut Pages.
+For non-Nix users, this repo publishes static binary downloads to SourceHut Pages.
 
-## Build a macOS binary artifact
+## Build a release artifact
 
-On macOS:
+On any supported platform:
 
 ```bash
-nix run .#package-macos
+nix build .#release-artifact
 ```
 
-This creates:
+This produces (for the current host platform, e.g. Apple silicon):
 
 ```text
-dist/downloads/granola-cli-v0.8.1-aarch64-darwin.tar.gz
-dist/downloads/granola-cli-v0.8.1-aarch64-darwin.tar.gz.sha256
+result/granola-cli-vX.Y.Z-aarch64-darwin.tar.gz
+result/granola-cli-vX.Y.Z-aarch64-darwin.tar.gz.sha256
 ```
 
-The tarball contains:
+The tarball is reproducible (fixed mtime/owner/ordering) and contains:
 
 - `granola`
 - `README.md`
 - `LICENSE`
+- `CHANGELOG.md`
+
+`nix run .#package-macos` remains as a deprecated alias that delegates to
+`nix build .#release-artifact` and copies the outputs into `dist/downloads/`.
+
+Linux x86_64 artifacts are built on SourceHut via the manifest in
+`builds/release-linux-x86_64.yml` (submitted explicitly with
+`hut builds submit` or `nix run .#release -- --submit-linux-build`; it does not
+run automatically on push because it lives in `builds/`, not `.builds/`).
 
 ## Build the SourceHut Pages site
 
 ```bash
-nix run .#build-pages
+nix run .#build-pages -- --include-existing-downloads
 ```
 
 This creates:
@@ -41,9 +50,23 @@ This creates:
 dist/pages/granola-cli-pages.tar.gz
 ```
 
-The pages archive contains an `index.html` plus `downloads/` with tarballs and checksums.
+The pages archive contains `index.html`, `manifest.json`, and `downloads/` with
+tarballs and checksums. Release copy on the page is generated from the matching
+`CHANGELOG.md` entry.
 
-The generated download page highlights the current release improvements, including refreshed dependency constraints, updated Nix inputs, and dependency maintenance tooling.
+`--include-existing-downloads` fetches previously published artifacts from the
+live `manifest.json` at
+`https://averagechris.srht.site/granola-cli/manifest.json` so a republish keeps
+older platforms/versions available. `manifest.json` has the schema:
+
+```json
+{
+  "version": "vX.Y.Z",
+  "artifacts": [
+    {"name": "...", "sha256": "...", "url": "..."}
+  ]
+}
+```
 
 ## Publish to SourceHut Pages
 
@@ -59,35 +82,12 @@ Then publish:
 nix run .#publish-pages
 ```
 
-Defaults:
+## Full release pipeline
 
-- domain: `averagechris.srht.site`
-- subdirectory: `/granola-cli`
-
-Override if needed:
+The orchestrator runs prepare → validate → tag → artifact → pages:
 
 ```bash
-nix run .#publish-pages -- --domain example.com --subdirectory /granola-cli
+nix run .#release -- --version X.Y.Z [--publish-pages] [--submit-linux-build]
 ```
 
-Expected download page:
-
-```text
-https://averagechris.srht.site/granola-cli/
-```
-
-Expected macOS artifact URL:
-
-```text
-https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.8.1-aarch64-darwin.tar.gz
-```
-
-## Manual install from hosted artifact
-
-```bash
-curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.8.1-aarch64-darwin.tar.gz
-curl -LO https://averagechris.srht.site/granola-cli/downloads/granola-cli-v0.8.1-aarch64-darwin.tar.gz.sha256
-sha256sum -c granola-cli-v0.8.1-aarch64-darwin.tar.gz.sha256
-tar -xzf granola-cli-v0.8.1-aarch64-darwin.tar.gz
-install -m 0755 granola-cli-v0.8.1-aarch64-darwin/granola ~/.local/bin/granola
-```
+See `nix run .#release -- --help` for skip flags.

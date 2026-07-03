@@ -1,5 +1,6 @@
 /target/
 /result
+/result-release-artifact
 /dist/
 /.direnv/
 *.swp

@@ -5,6 +5,14 @@
 ### Added
 
 - Added `cargo-machete` and `cargo-vet` local CI checks for unused direct dependencies and dependency review policy enforcement.
+- Added the standard Nix release pipeline: `nix build .#release-artifact` (reproducible tarball + `.sha256` with README, CHANGELOG, and LICENSE), `nix run .#prepare-release`, `nix run .#release-tag`, and the `nix run .#release` orchestrator.
+- Added `builds/release-linux-x86_64.yml` for explicit SourceHut Linux x86_64 release builds that republish pages with existing downloads.
+- `build-pages` now generates a `manifest.json` (version + artifact name/sha256/url) and supports `--include-existing-downloads` to retain previously published artifacts.
+- Added flake checks (`build`, `fmt`, `release-artifact`) so `nix flake check` validates the build.
+
+### Changed
+
+- `package-macos` is now a deprecated alias that delegates to `nix build .#release-artifact`.
 
 ## v0.8.1 - 2026-06-30
 
