@@ -30,6 +30,12 @@
 
           nativeBuildInputs = with pkgs; [cmake pkg-config];
 
+          # reqwest's rustls-platform-verifier needs a CA bundle even to
+          # construct a client; the Linux nix sandbox has no /etc/ssl, so
+          # the wiremock-backed tests fail with "builder error" without this.
+          nativeCheckInputs = [pkgs.cacert];
+          env.SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+
           meta = lib.attrsets.filterAttrs (_: value: value != null) {
             description = package.description or null;
             license =
