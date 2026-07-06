@@ -30,6 +30,7 @@
           versionMode = "package";
           versionFile = "Cargo.toml";
           lockPackages = ["granola-cli"];
+          extraStaticChecks = [ciMachete];
         };
         granola = pkgs.rustPlatform.buildRustPackage {
           pname = cliProgram;
@@ -146,6 +147,7 @@
               fleetApps.apps."prepare-release".program
               fleetApps.apps.release.program
               fleetApps.apps."release-tag".program
+              fleetApps.apps."static-checks".program
             ];
         };
         fmtCheck =
