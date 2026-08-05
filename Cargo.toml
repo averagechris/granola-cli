@@ -1,6 +1,6 @@
 [package]
 name = "granola-cli"
-version = "0.8.1"
+version = "0.8.2"
 edition = "2021"
 description = "A Rust CLI for Granola meeting notes"
 authors = ["Christopher Cummings"]
@@ -31,7 +31,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"
 toml = "1"
 unicode-width = "0.2"
 url = "2"
-open = "5.3.5"
+open = "5.4.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = "4"

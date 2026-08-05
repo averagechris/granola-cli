@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+
+## v0.8.2 - 2026-08-05
+
 ### Added
 
 - Added `cargo-machete` and `cargo-vet` local CI checks for unused direct dependencies and dependency review policy enforcement.
@@ -13,7 +16,7 @@
 ### Changed
 
 - `package-macos` is now a deprecated alias that delegates to `nix build .#release-artifact`.
-
+- Refreshed Cargo dependencies, Nix flake inputs, and supply-chain review metadata for routine maintenance.
 ## v0.8.1 - 2026-06-30
 
 ### Changed

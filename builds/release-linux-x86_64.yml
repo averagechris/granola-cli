@@ -77,5 +77,5 @@ tasks:
       EOF
       srht builds submit "$manifest" --secrets --note "site refresh: granola-cli $tag"
 artifacts:
-  - artifacts/granola-cli-v0.8.1-x86_64-linux.tar.gz
-  - artifacts/granola-cli-v0.8.1-x86_64-linux.tar.gz.sha256
+  - artifacts/granola-cli-v0.8.2-x86_64-linux.tar.gz
+  - artifacts/granola-cli-v0.8.2-x86_64-linux.tar.gz.sha256
