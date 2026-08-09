@@ -84,10 +84,26 @@ nix run .#publish-pages
 
 ## Full release pipeline
 
-The orchestrator runs prepare → validate → tag → artifact → pages:
+Tiny-safe preflight is read-only and changes no files, jj operations, local
+refs, or remote refs:
 
 ```bash
-nix run .#release -- --version X.Y.Z [--publish-pages] [--submit-linux-build]
+nix run .#release -- --version X.Y.Z --check
 ```
 
-See `nix run .#release -- --help` for skip flags.
+Then use the one normal release command:
+
+```bash
+nix run .#release -- --version X.Y.Z
+```
+
+Run it from an empty jj working-copy commit whose parent, local `main`, and
+`main@origin` agree. It prepares metadata, validates the prepared tree with the
+standard gates plus deterministic `ci-machete` and `release-contract`, builds
+and verifies the artifact and checksum, and only then atomically publishes
+leased `main` plus the annotated tag. If publication succeeded but upload or
+refresh failed, rerun the exact command: matching state resumes idempotently;
+any mismatch fails closed. `ci-deny`, `ci-audit`, and `ci-vet` remain repository
+lints because their advisory/audit inputs require network services and are not
+deterministic publication gates. Do not use obsolete skip or pages-publication
+flags; `--submit-linux-build` remains available when explicitly wanted.

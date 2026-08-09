@@ -31,6 +31,9 @@
           versionMode = "package";
           versionFile = "Cargo.toml";
           lockPackages = ["granola-cli"];
+          # ci-deny/audit/vet consult remote advisory or audit data; keep those
+          # valuable network-volatile checks in jj lint rather than publication.
+          releaseValidationApps = ["ci-machete" "release-contract"];
           extraStaticChecks = [ciMachete];
         };
         granola = pkgs.rustPlatform.buildRustPackage {
@@ -162,6 +165,33 @@
             ${fleetApps.apps.ci-fmt.program}
             mkdir -p "$out"
           '';
+        releaseContract =
+          pkgs.runCommand "granola-cli-release-contract" {
+            nativeBuildInputs = [
+              (pkgs.writeShellApplication {
+                name = "release";
+                text = ''exec ${fleetApps.apps.release.program} "$@"'';
+              })
+            ];
+            src = lib.cleanSource ./.;
+          } ''
+            release --help > help.txt
+            cat > expected-help.txt <<'EOF'
+            usage: release --version X.Y.Z [--check] [--allow-downgrade] [--submit-linux-build]
+
+            --check               verify release readiness without editing files or publishing refs
+            --version X.Y.Z       required release version
+            --allow-downgrade     permit a lower version; the target tag must still be new
+            --submit-linux-build  submit the Linux release build after publication
+            EOF
+            diff -u expected-help.txt help.txt
+            grep -Fq 'nix run .#release -- --version X.Y.Z --check' "$src/docs/downloads.md"
+            grep -Fq 'nix run .#release -- --version X.Y.Z' "$src/docs/downloads.md"
+            grep -Fq 'prepared tree' "$src/docs/downloads.md"
+            grep -Fq 'atomically publishes' "$src/docs/downloads.md"
+            grep -Fq 'empty jj working-copy commit' "$src/docs/downloads.md"
+            mkdir -p "$out"
+          '';
         # `nix fmt` invokes the formatter app without path arguments. Alejandra
         # treats no arguments as "format stdin", which fails on empty stdin, so
         # keep the formatter as Alejandra but default it to formatting the repo.
@@ -206,6 +236,7 @@
             ci-audit = flake-utils.lib.mkApp {drv = ciAudit;};
             ci-deny = flake-utils.lib.mkApp {drv = ciDeny;};
             ci-machete = flake-utils.lib.mkApp {drv = ciMachete;};
+            release-contract = flake-utils.lib.mkApp {drv = releaseContract;};
             ci-vet = flake-utils.lib.mkApp {drv = ciVet;};
             package-macos = flake-utils.lib.mkApp {drv = packageMacos;};
             build-pages = flake-utils.lib.mkApp {drv = buildPages;};
@@ -217,6 +248,7 @@
           build = granola;
           fmt = fmtCheck;
           release-artifact = fleetApps.releaseArtifact system;
+          release-contract = releaseContract;
         };
 
         devShells.default = pkgs.mkShell {

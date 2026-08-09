@@ -13,26 +13,27 @@ Use `jj` for version-control actions in this repository.
 
 When Chris says "ship a new version", use the standard Nix release pipeline:
 
-1. Choose the next semver from the change type, then run the orchestrator:
-   `nix run .#release -- --version X.Y.Z`. This runs `prepare-release`
+1. Choose the next semver, run the read-only Tiny-safe preflight
+   `nix run .#release -- --version X.Y.Z --check`, then run exactly
+   `nix run .#release -- --version X.Y.Z` from an empty `@` whose parent, local
+   `main`, and `main@origin` agree. This runs `prepare-release`
    (bumps `Cargo.toml`/`Cargo.lock`, converts CHANGELOG `## Unreleased` to a
    dated `## vX.Y.Z - YYYY-MM-DD` entry — generating bullets from conventional
    commits if empty — and updates artifact names in
-   `builds/release-linux-x86_64.yml`), validates (`nix flake check`,
-   `ci-test`, `ci-clippy`), tags + pushes via `release-tag` (jj tag `vX.Y.Z`,
-   moves the `main` bookmark, pushes), builds `.#release-artifact` into
-   `dist/downloads/`, and builds the pages site with
-   `--include-existing-downloads`.
-2. Publish downloads with `--publish-pages` (or `nix run .#publish-pages`
-   afterwards) and verify the tag plus hosted files (`manifest.json`, tarball,
+   `builds/release-linux-x86_64.yml`), validates the prepared tree (standard
+   Rust gates, deterministic `ci-machete`, and `release-contract`), builds and
+   verifies the artifact before atomically publishing leased `main` plus the
+   annotated tag, uploads it, and requests the central Pages refresh.
+2. Verify the tag plus hosted files (`manifest.json`, tarball,
    `.sha256`) are reachable at
    https://averagechris.srht.site/granola-cli/.
 3. Submit the Linux x86_64 build with `--submit-linux-build` (or
    `hut builds submit builds/release-linux-x86_64.yml`); it builds the Linux
    release artifact and republishes pages including existing downloads. The
    manifest lives in `builds/` (not `.builds/`) so it never runs on push.
-4. Skip flags are available for partial runs: `--skip-validate`, `--skip-tag`,
-   `--skip-artifact`, `--skip-pages`.
+4. If publication succeeded but upload/refresh failed, rerun the exact command;
+   matching state resumes idempotently and mismatches fail closed. Obsolete
+   skip/pages flags must not be used.
 
 Notes:
 
@@ -43,6 +44,8 @@ Notes:
   `release-artifact` and copies outputs to `dist/downloads/`.
 - Release-page copy is generated from `CHANGELOG.md`; no manual edits to
   `scripts/build-pages.sh` are needed per release.
+- `ci-deny`, `ci-audit`, and `ci-vet` stay in repository lint because their
+  remote advisory/audit inputs are network-volatile; they are not release gates.
 
 ### Product Constraints
 

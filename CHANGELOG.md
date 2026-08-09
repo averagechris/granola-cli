@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Changed
+
+- Made releases fail safe with read-only preflight, deterministic prepared-tree gates, verified artifacts before atomic refs, and idempotent resume.
 
 ## v0.8.2 - 2026-08-05
 
