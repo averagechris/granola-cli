@@ -98,12 +98,14 @@ version = "1.5.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.aws-lc-rs]]
-version = "1.17.3"
+version = "1.18.1"
 criteria = "safe-to-deploy"
+notes = "User-approved exemption for a security-fix update; not an independent audit."
 
 [[exemptions.aws-lc-sys]]
-version = "0.43.0"
+version = "0.45.0"
 criteria = "safe-to-deploy"
+notes = "User-approved exemption for a security-fix update; not an independent audit."
 
 [[exemptions.bitflags]]
 version = "2.13.1"
@@ -146,8 +148,9 @@ version = "0.2.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.chacha20]]
-version = "0.10.1"
+version = "0.10.2"
 criteria = "safe-to-deploy"
+notes = "User-approved exemption for a security-fix update; not an independent audit."
 
 [[exemptions.chrono]]
 version = "0.4.45"
@@ -342,8 +345,9 @@ version = "0.4.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.h2]]
-version = "0.4.15"
+version = "0.4.16"
 criteria = "safe-to-deploy"
+notes = "User-approved exemption for a security-fix update; not an independent audit."
 
 [[exemptions.hashbrown]]
 version = "0.17.1"
@@ -662,8 +666,9 @@ version = "1.1.4"
 criteria = "safe-to-deploy"
 
 [[exemptions.rustls]]
-version = "0.23.43"
+version = "0.23.45"
 criteria = "safe-to-deploy"
+notes = "User-approved exemption for a security-fix update; not an independent audit."
 
 [[exemptions.rustls-native-certs]]
 version = "0.8.4"

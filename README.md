@@ -91,7 +91,7 @@ nix profile install sourcehut:averagechris/granola-cli
 
 ### Binary downloads
 
-Hosted downloads for non-Nix users are published on SourceHut Pages:
+Historical downloads for non-Nix users remain on SourceHut Pages:
 
 ```text
 https://averagechris.srht.site/granola-cli/
@@ -187,15 +187,21 @@ cargo test --test output_snapshots
 INSTA_UPDATE=always cargo test --test output_snapshots
 ```
 
-### Hosted download publishing
+### Releases
 
 ```bash
-nix run .#package-macos
-nix run .#build-pages
-nix run .#publish-pages
+nix run .#release -- --version X.Y.Z --check
+nix run .#release -- --version X.Y.Z
 ```
 
-`nix run .#publish-pages` requires `hut` configuration. Configure it once with `nix run nixpkgs#hut -- init`.
+The local GitHub backend validates the prepared tree, then atomically publishes
+`main` and its annotated tag. A read-only GitHub Actions workflow builds the
+macOS arm64 and Linux x86_64 archives. It does not create a release or update
+Pages. Follow [`docs/release.md`](docs/release.md) to verify six downloaded
+files, manually publish the four archive and checksum assets, and dispatch the
+Pages refresh. Future releases are GitHub-only. The SourceHut build manifest
+and publishing scripts remain for historical releases and local preview, not
+for publishing new releases.
 
 ## Planning docs
 

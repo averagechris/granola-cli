@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    fleet.url = "git+https://git.sr.ht/~averagechris/averagechris.srht.site";
+    fleet.url = "github:averagechris/fleet/e31a02573d79dfeb2496fec6c21cf74a0ece4d79";
   };
 
   outputs = {
@@ -26,8 +26,7 @@
           srhtPackage = fleet.packages.${system}.srht;
           pname = "granola-cli";
           binaries = ["granola"];
-          subdir = "granola-cli";
-          srhtRepo = "granola-cli";
+          releaseBackend = "github";
           versionMode = "package";
           versionFile = "Cargo.toml";
           lockPackages = ["granola-cli"];
@@ -177,19 +176,16 @@
           } ''
             release --help > help.txt
             cat > expected-help.txt <<'EOF'
-            usage: release --version X.Y.Z [--check] [--allow-downgrade] [--submit-linux-build]
-
-            --check               verify release readiness without editing files or publishing refs
-            --version X.Y.Z       required release version
-            --allow-downgrade     permit a lower version; the target tag must still be new
-            --submit-linux-build  submit the Linux release build after publication
+            usage: release --version X.Y.Z [--check] [--allow-downgrade]
+              --check  nonmutating ref/version preflight only; does not run validation or build artifacts
             EOF
             diff -u expected-help.txt help.txt
-            grep -Fq 'nix run .#release -- --version X.Y.Z --check' "$src/docs/downloads.md"
-            grep -Fq 'nix run .#release -- --version X.Y.Z' "$src/docs/downloads.md"
-            grep -Fq 'prepared tree' "$src/docs/downloads.md"
-            grep -Fq 'atomically publishes' "$src/docs/downloads.md"
-            grep -Fq 'empty jj working-copy commit' "$src/docs/downloads.md"
+            grep -Fq 'nix run .#release -- --version X.Y.Z --check' "$src/docs/release.md"
+            grep -Fq 'nix run .#release -- --version X.Y.Z' "$src/docs/release.md"
+            if grep -Eq -- '--(submit-linux-build|skip-(validate|tag|artifact|pages)|publish-pages)' help.txt "$src/docs/release.md"; then
+              printf 'release help or documentation exposes an obsolete release flag\n' >&2
+              exit 1
+            fi
             mkdir -p "$out"
           '';
         # `nix fmt` invokes the formatter app without path arguments. Alejandra

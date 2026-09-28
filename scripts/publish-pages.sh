@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+printf '%s\n' 'SourceHut Pages publication is retired; follow docs/release.md for GitHub-only releases' >&2
+exit 1
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${repo_root}"
 

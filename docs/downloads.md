@@ -1,4 +1,8 @@
-# Hosted Downloads
+# Historical downloads and local previews
+
+Future releases use the manual GitHub process in [release.md](release.md).
+This page documents the historical SourceHut site and local preview tools.
+Do not use `publish-pages` or the SourceHut build manifest for a new release.
 
 Primary install remains Nix:
 
@@ -6,7 +10,7 @@ Primary install remains Nix:
 nix run sourcehut:averagechris/granola-cli
 ```
 
-For non-Nix users, this repo publishes static binary downloads to SourceHut Pages.
+Historical static binary downloads remain on SourceHut Pages.
 
 ## Build a release artifact
 
@@ -33,10 +37,9 @@ The tarball is reproducible (fixed mtime/owner/ordering) and contains:
 `nix run .#package-macos` remains as a deprecated alias that delegates to
 `nix build .#release-artifact` and copies the outputs into `dist/downloads/`.
 
-Linux x86_64 artifacts are built on SourceHut via the manifest in
-`builds/release-linux-x86_64.yml` (submitted explicitly with
-`hut builds submit` or `nix run .#release -- --submit-linux-build`; it does not
-run automatically on push because it lives in `builds/`, not `.builds/`).
+Historical Linux x86_64 artifacts were built on SourceHut via
+`builds/release-linux-x86_64.yml`. The manifest remains as an archive. Do not
+submit it for a new tag.
 
 ## Build the SourceHut Pages site
 
@@ -68,42 +71,17 @@ older platforms/versions available. `manifest.json` has the schema:
 }
 ```
 
-## Publish to SourceHut Pages
+## Retired SourceHut publication
 
-Configure `hut` once:
-
-```bash
-nix run nixpkgs#hut -- init
-```
-
-Then publish:
+`publish-pages` is retained as a compatibility name, but it now exits with an
+error. It cannot publish a future release:
 
 ```bash
 nix run .#publish-pages
 ```
 
-## Full release pipeline
+## Historical release pipeline
 
-Tiny-safe preflight is read-only and changes no files, jj operations, local
-refs, or remote refs:
-
-```bash
-nix run .#release -- --version X.Y.Z --check
-```
-
-Then use the one normal release command:
-
-```bash
-nix run .#release -- --version X.Y.Z
-```
-
-Run it from an empty jj working-copy commit whose parent, local `main`, and
-`main@origin` agree. It prepares metadata, validates the prepared tree with the
-standard gates plus deterministic `ci-machete` and `release-contract`, builds
-and verifies the artifact and checksum, and only then atomically publishes
-leased `main` plus the annotated tag. If publication succeeded but upload or
-refresh failed, rerun the exact command: matching state resumes idempotently;
-any mismatch fails closed. `ci-deny`, `ci-audit`, and `ci-vet` remain repository
-lints because their advisory/audit inputs require network services and are not
-deterministic publication gates. Do not use obsolete skip or pages-publication
-flags; `--submit-linux-build` remains available when explicitly wanted.
+The old SourceHut release pipeline is retired. Historical tags, artifact URLs,
+and mixed-platform Pages entries remain valid. Use `docs/release.md` for all
+future tags.
